@@ -20,6 +20,7 @@
   .topbar input{flex:1;min-width:0;padding:12px 14px;border-radius:12px;border:0;font-size:16px;box-shadow:0 2px 10px rgba(0,0,0,.25);background:#fff}
   .btn{border:0;border-radius:12px;padding:12px 14px;font-size:15px;font-weight:600;cursor:pointer;background:var(--brand);color:#fff;font-family:inherit}
   .btn:active{background:var(--brand-d)}
+  .btn[disabled]{opacity:.6}
   .btn.light{background:#fff;color:var(--fg);box-shadow:0 2px 10px rgba(0,0,0,.25)}
   .btn.ghost{background:#f3f4f6;color:var(--fg)}
   .btn.danger{background:#fee2e2;color:var(--danger)}
@@ -31,7 +32,7 @@
   .sheet{position:absolute;left:0;right:0;bottom:0;max-height:92%;overflow:auto;background:#fff;border-radius:18px 18px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom) + 16px)}
   .sheet h2{margin:0 0 12px;font-size:18px}
   label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
-  .sheet input[type=text],.sheet input[type=tel],.sheet textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:16px;font-family:inherit}
+  .sheet input[type=text],.sheet input[type=tel],.sheet textarea,.gate-box input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:16px;font-family:inherit}
   .row{display:flex;gap:8px;margin-top:14px}
   .row>*{flex:1}
   .coord{font-size:13px;color:var(--muted);margin-top:6px}
@@ -63,6 +64,14 @@
   #viewerBody{flex:1;overflow:auto;padding:0 8px calc(env(safe-area-inset-bottom) + 12px)}
   #viewerBody img{display:block;width:100%;max-width:900px;margin:0 auto 10px;border-radius:8px}
   #viewerBody .empty{color:#fff}
+  /* login / status gate */
+  #gate{position:fixed;inset:0;z-index:2000;background:#f0fdfa;display:flex;align-items:center;justify-content:center;padding:20px}
+  .gate-box{width:100%;max-width:380px;background:#fff;border-radius:18px;padding:22px;box-shadow:0 6px 30px rgba(0,0,0,.12)}
+  .gate-box h1{margin:0 0 4px;font-size:22px}
+  .gate-box p{margin:0 0 12px;color:var(--muted);font-size:14px;line-height:1.5}
+  .gate-box .btn{width:100%;margin-top:14px}
+  .gate-err{color:var(--danger);font-size:14px;margin-top:10px;white-space:pre-wrap}
+  .gate-box code{background:#f3f4f6;padding:1px 5px;border-radius:5px;font-size:13px}
 </style>
 </head>
 <body>
@@ -115,8 +124,13 @@
   <div class="row">
     <button class="btn ghost" id="btnExport">สำรองข้อมูล</button>
     <button class="btn ghost" id="btnImport">นำเข้าข้อมูล</button>
+  </div>
+  <div class="row" id="migrateRow" style="display:none"><button class="btn ghost" id="btnMigrate">⬆️ ย้ายข้อมูลเดิมในเครื่องขึ้นระบบ</button></div>
+  <div class="row">
+    <button class="btn ghost" id="btnLogout">ออกจากระบบ</button>
     <button class="btn" id="btnCloseList">ปิด</button>
   </div>
+  <div class="coord" id="whoami" style="text-align:center"></div>
   <input type="file" id="fileImport" accept="application/json" style="display:none">
 </div></div>
 
@@ -125,54 +139,54 @@
   <div id="viewerBody"></div>
 </div>
 
+<div id="gate"><div class="gate-box" id="gateBox"></div></div>
 <div id="toast"></div>
 
+<script src="config.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 (function(){
-  var KEY='parcel_pins_v1';
-  var MAXP=3;
-  var pins=load();
-  function migrate(p){if(p&&p.track!==undefined){if(!p.address&&p.track)p.address=p.track;delete p.track}return p}
-  function load(){try{var d=JSON.parse(localStorage.getItem(KEY));return Array.isArray(d)?d.map(migrate):[]}catch(e){return[]}}
-  function save(){try{localStorage.setItem(KEY,JSON.stringify(pins));return true}catch(e){toast('บันทึกไม่สำเร็จ พื้นที่เก็บข้อมูลเต็มหรือถูกบล็อก');return false}}
-  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+  var BUCKET='pin-photos', MAXP=3;
+  var LOCAL_KEY='parcel_pins_v1';           // ข้อมูลเวอร์ชันเก่า (เก็บในเครื่อง) ใช้สำหรับย้ายขึ้นระบบ
+  var CFG=window.APP_CONFIG||{};
+  var sb=null, me=null, pins=[], photoCache={};
+
   function $(id){return document.getElementById(id)}
-  function toast(m){var t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(toast._t);toast._t=setTimeout(function(){t.style.display='none'},3000)}
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+  function toast(m){var t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(toast._t);toast._t=setTimeout(function(){t.style.display='none'},3200)}
+  function errMsg(e){return (e&&(e.message||e.error_description||e.msg))||String(e)}
   function gmaps(p){return 'https://www.google.com/maps/dir/?api=1&destination='+p.lat+','+p.lng+'&travelmode=driving'}
   function amaps(p){return 'https://maps.apple.com/?daddr='+p.lat+','+p.lng+'&dirflg=d'}
   function title(p){return p.name||p.address||'(ไม่มีชื่อ)'}
-  function uid(prefix){return prefix+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
   function revoke(u){try{URL.revokeObjectURL(u)}catch(e){}}
+  function newId(){
+    if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();
+    var b=new Uint8Array(16);crypto.getRandomValues(b);b[6]=(b[6]&15)|64;b[8]=(b[8]&63)|128;
+    var h=Array.prototype.map.call(b,function(x){return ('0'+x.toString(16)).slice(-2)}).join('');
+    return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);
+  }
+  function shortKey(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+  function migrateOld(p){if(p&&p.track!==undefined){if(!p.address&&p.track)p.address=p.track;delete p.track}return p}
+  function dedupeKey(p){return [Number(p.lat).toFixed(6),Number(p.lng).toFixed(6),(p.address||'').trim(),(p.name||'').trim()].join('|')}
 
-  /* ---------- photo storage (IndexedDB: รูปเก็บเป็นไฟล์ แยกจากข้อมูลหมุด) ---------- */
-  var dbp=null;
-  function idb(){
-    if(dbp)return dbp;
-    dbp=new Promise(function(res,rej){
-      if(!window.indexedDB){rej(new Error('เครื่องนี้ไม่รองรับการเก็บรูป'));return}
-      var r=indexedDB.open('parcel_photos_v1',1);
-      r.onupgradeneeded=function(){r.result.createObjectStore('photos',{keyPath:'id'})};
-      r.onsuccess=function(){res(r.result)};
-      r.onerror=function(){rej(r.error)};
-    });
-    dbp.catch(function(){dbp=null});
-    return dbp;
+  /* ---------- Supabase data layer ---------- */
+  function fromRow(r){
+    return {id:r.id,address:r.address||'',name:r.name||'',phone:r.phone||'',note:r.note||'',
+      lat:r.lat,lng:r.lng,photos:Array.isArray(r.photos)?r.photos:[],createdAt:r.created_at?Date.parse(r.created_at):0};
   }
-  function tx(mode,fn){
-    return idb().then(function(db){
-      return new Promise(function(res,rej){
-        var t=db.transaction('photos',mode),req=fn(t.objectStore('photos'));
-        t.oncomplete=function(){res(req&&req.result)};
-        t.onerror=t.onabort=function(){rej(t.error||new Error('เก็บรูปไม่สำเร็จ'))};
-      });
-    });
+  async function loadPins(){
+    var r=await sb.from('pins').select('*').order('created_at',{ascending:false});
+    if(r.error)throw r.error;
+    pins=(r.data||[]).map(fromRow);
   }
-  function photoPut(id,blob){return tx('readwrite',function(s){return s.put({id:id,blob:blob})})}
-  function photoDel(id){return tx('readwrite',function(s){return s.delete(id)})}
-  function photoGet(id){return tx('readonly',function(s){return s.get(id)}).then(function(r){return r&&r.blob||null})}
+  async function photoGet(path){
+    if(photoCache[path])return photoCache[path];
+    var r=await sb.storage.from(BUCKET).download(path);
+    if(r.error)throw r.error;
+    photoCache[path]=r.data;return r.data;
+  }
   function blobToDataURL(b){return new Promise(function(res){var r=new FileReader();r.onload=function(){res(r.result)};r.onerror=function(){res(null)};r.readAsDataURL(b)})}
-
   // ย่อรูปให้ด้านยาวไม่เกิน 1024px เป็น JPEG เพื่อประหยัดพื้นที่
   function compress(file){
     return new Promise(function(res,rej){
@@ -187,6 +201,62 @@
       img.onerror=function(){revoke(url);rej(new Error('อ่านรูปไม่ได้'))};
       img.src=url;
     });
+  }
+  async function uploadPhoto(pinId,blob){
+    var path=me.id+'/'+pinId+'/'+shortKey()+'.jpg';
+    var r=await sb.storage.from(BUCKET).upload(path,blob,{contentType:'image/jpeg',upsert:true});
+    if(r.error)throw r.error;
+    photoCache[path]=blob;
+    return path;
+  }
+  async function removePhotos(paths){
+    if(!paths||!paths.length)return;
+    paths.forEach(function(p){delete photoCache[p]});
+    try{await sb.storage.from(BUCKET).remove(paths)}catch(e){}
+  }
+
+  /* ---------- gate (login / status) ---------- */
+  function showGate(html){$('gateBox').innerHTML=html;$('gate').style.display='flex'}
+  function hideGate(){$('gate').style.display='none'}
+  function gateMsg(t,msg){showGate('<h1>'+esc(t)+'</h1><p>'+esc(msg)+'</p>')}
+  function gateConfig(){
+    showGate('<h1>ยังไม่ได้ตั้งค่า Supabase</h1>'
+      +'<p>เปิดไฟล์ <code>config.js</code> แล้วใส่ <code>SUPABASE_URL</code> และ <code>SUPABASE_ANON_KEY</code> จาก Supabase (Project Settings → API) จากนั้นอัปโหลดไฟล์ขึ้น GitHub ใหม่</p>');
+  }
+  function gateError(msg){
+    showGate('<h1>เชื่อมต่อไม่สำเร็จ</h1><p>'+esc(msg)+'</p>'
+      +'<button class="btn" id="gRetry">ลองใหม่</button>'
+      +'<button class="btn ghost" id="gOut">ออกจากระบบ</button>');
+    $('gRetry').onclick=function(){enter()};
+    $('gOut').onclick=function(){logout()};
+  }
+  function showLogin(msg){
+    showGate('<h1>📦 จุดส่งพัสดุ</h1><p>เข้าสู่ระบบเพื่อดูและบันทึกจุดส่ง</p>'
+      +'<form id="gForm" autocomplete="on">'
+      +'<label>อีเมล</label><input type="email" id="gEmail" autocomplete="username" required>'
+      +'<label>รหัสผ่าน</label><input type="password" id="gPass" autocomplete="current-password" required>'
+      +'<button class="btn" id="gGo" type="submit">เข้าสู่ระบบ</button></form>'
+      +'<div class="gate-err" id="gErr">'+esc(msg||'')+'</div>');
+    $('gForm').onsubmit=async function(ev){
+      ev.preventDefault();
+      var btn=$('gGo');btn.disabled=true;btn.textContent='กำลังเข้าสู่ระบบ...';$('gErr').textContent='';
+      try{
+        var r=await sb.auth.signInWithPassword({email:$('gEmail').value.trim(),password:$('gPass').value});
+        if(r.error)throw r.error;
+        me=r.data.user||(r.data.session&&r.data.session.user);
+        await enter();
+      }catch(e){
+        var m=errMsg(e);
+        if(/invalid login/i.test(m))m='อีเมลหรือรหัสผ่านไม่ถูกต้อง';
+        if($('gErr')){$('gErr').textContent=m;btn.disabled=false;btn.textContent='เข้าสู่ระบบ'}
+      }
+    };
+  }
+  async function logout(){
+    try{await sb.auth.signOut()}catch(e){}
+    me=null;pins=[];photoCache={};
+    closeList();closeForm();closeViewer();hideTemp();render(false);
+    showLogin();
   }
 
   /* ---------- map ---------- */
@@ -204,8 +274,8 @@
       +(p.note?'<div class="s">'+esc(p.note)+'</div>':'')
       +'<div class="acts"><a class="btn" target="_blank" rel="noopener" href="'+gmaps(p)+'">นำทาง</a>'
       +'<a class="btn ghost" target="_blank" rel="noopener" href="'+amaps(p)+'">Apple Maps</a>'
-      +(n?'<button class="btn ghost" data-view="'+p.id+'">🖼 ดูรูป ('+n+')</button>':'')
-      +'<button class="btn ghost" data-edit="'+p.id+'">แก้ไข</button></div></div>';
+      +(n?'<button class="btn ghost" data-view="'+esc(p.id)+'">🖼 ดูรูป ('+n+')</button>':'')
+      +'<button class="btn ghost" data-edit="'+esc(p.id)+'">แก้ไข</button></div></div>';
   }
   function render(fit){
     layer.clearLayers();markers={};
@@ -236,7 +306,7 @@
   $('btnLocate').onclick=function(){getPos(function(ll){map.setView(ll,Math.max(map.getZoom(),16));toast('พบตำแหน่งแล้ว')})};
 
   /* ---------- form ---------- */
-  var formPos=null, formPhotos=[], removedPhotos=[], formToken=0, saving=false;
+  var formPos=null, formPhotos=[], removedPaths=[], formToken=0, saving=false;
   function setCoord(){$('fCoord').textContent=formPos?('พิกัด '+formPos.lat.toFixed(6)+', '+formPos.lng.toFixed(6)):''}
   function clearFormPhotos(){formPhotos.forEach(function(x){revoke(x.url)});formPhotos=[]}
   function renderFormPhotos(){
@@ -247,7 +317,7 @@
   }
   function openForm(p){
     p=p||{};
-    clearFormPhotos();removedPhotos=[];
+    clearFormPhotos();removedPaths=[];
     var tok=++formToken;
     $('fId').value=p.id||'';
     $('fAddr').value=p.address||'';$('fName').value=p.name||'';
@@ -259,8 +329,8 @@
     $('formBg').classList.add('open');
     map.closePopup();
     if(p.photos&&p.photos.length){
-      Promise.all(p.photos.map(function(id){
-        return photoGet(id).then(function(b){return b?{id:id,blob:b,url:URL.createObjectURL(b),isNew:false}:null}).catch(function(){return null});
+      Promise.all(p.photos.map(function(path){
+        return photoGet(path).then(function(b){return {key:path,path:path,blob:b,url:URL.createObjectURL(b),isNew:false}}).catch(function(){return null});
       })).then(function(arr){
         if(tok!==formToken){arr.forEach(function(x){x&&revoke(x.url)});return}
         formPhotos=arr.filter(Boolean).concat(formPhotos);renderFormPhotos();
@@ -272,13 +342,12 @@
     $('formBg').classList.remove('open');
     if(tempMarker){map.removeLayer(tempMarker);tempMarker=null}
     tempLatLng=null;
-    clearFormPhotos();removedPhotos=[];renderFormPhotos();
+    clearFormPhotos();removedPaths=[];renderFormPhotos();
   }
   $('fCancel').onclick=closeForm;
   $('formBg').addEventListener('click',function(e){if(e.target===this)closeForm()});
   $('fGps').onclick=function(){getPos(function(ll){formPos={lat:ll[0],lng:ll[1]};setCoord();toast('อัปเดตพิกัดจาก GPS แล้ว')})};
 
-  // เพิ่มรูป
   function addFiles(files){
     var list=Array.prototype.slice.call(files||[]);
     var room=MAXP-formPhotos.length;
@@ -287,9 +356,9 @@
     var tok=formToken;
     Promise.all(list.map(function(f){return compress(f)})).then(function(blobs){
       if(tok!==formToken)return;
-      blobs.forEach(function(b){formPhotos.push({id:uid('ph'),blob:b,url:URL.createObjectURL(b),isNew:true})});
+      blobs.forEach(function(b){formPhotos.push({key:shortKey(),path:null,blob:b,url:URL.createObjectURL(b),isNew:true})});
       renderFormPhotos();
-    }).catch(function(err){toast('เพิ่มรูปไม่สำเร็จ: '+(err&&err.message||err))});
+    }).catch(function(err){toast('เพิ่มรูปไม่สำเร็จ: '+errMsg(err))});
   }
   $('fCam').onclick=function(){$('fCamIn').click()};
   $('fPick').onclick=function(){$('fPickIn').click()};
@@ -298,49 +367,64 @@
   $('fPhotos').addEventListener('click',function(e){
     var b=e.target.closest&&e.target.closest('[data-rmphoto]');if(!b)return;
     var item=formPhotos.splice(parseInt(b.getAttribute('data-rmphoto'),10),1)[0];
-    if(item){if(!item.isNew)removedPhotos.push(item.id);revoke(item.url)}
+    if(item){if(!item.isNew)removedPaths.push(item.path);revoke(item.url)}
     renderFormPhotos();
   });
 
-  $('fSave').onclick=function(){
+  $('fSave').onclick=async function(){
     if(saving)return;
     if(!formPos||typeof formPos.lat!=='number'){toast('ยังไม่มีพิกัด');return}
     var data={address:$('fAddr').value.trim(),name:$('fName').value.trim(),phone:$('fPhone').value.trim(),note:$('fNote').value.trim(),lat:formPos.lat,lng:formPos.lng};
     if(!data.address&&!data.name){toast('กรอกที่อยู่หรือชื่อลูกค้าอย่างน้อย 1 อย่าง');return}
     saving=true;
-    var newOnes=formPhotos.filter(function(x){return x.isNew}), rem=removedPhotos.slice();
-    Promise.all(newOnes.map(function(x){return photoPut(x.id,x.blob)}))
-      .then(function(){return Promise.all(rem.map(function(id){return photoDel(id).catch(function(){})}))})
-      .then(function(){
-        data.photos=formPhotos.map(function(x){return x.id});
-        var id=$('fId').value;
-        if(id){
-          var p=pins.filter(function(x){return x.id===id})[0];
-          if(p){for(var k in data)p[k]=data[k]}
-        }else{
-          data.id=uid('p');data.createdAt=Date.now();
-          pins.unshift(data);id=data.id;
-        }
-        if(!save())return;
-        closeForm();render(false);
-        map.setView([data.lat,data.lng],Math.max(map.getZoom(),16));
-        if(markers[id])markers[id].openPopup();
-        toast('บันทึกแล้ว');
-      })
-      .catch(function(err){toast('บันทึกไม่สำเร็จ: '+(err&&err.message||err))})
-      .then(function(){saving=false});
+    var btn=$('fSave');btn.disabled=true;btn.textContent='กำลังบันทึก...';
+    var uploaded=[];
+    try{
+      var editId=$('fId').value, id=editId||newId(), paths=[];
+      for(var i=0;i<formPhotos.length;i++){
+        var ph=formPhotos[i];
+        if(ph.isNew&&!ph.path){var pth=await uploadPhoto(id,ph.blob);ph.path=pth;uploaded.push(pth)}
+        paths.push(ph.path);
+      }
+      data.photos=paths;
+      var res;
+      if(editId){res=await sb.from('pins').update(data).eq('id',editId)}
+      else{var row={};for(var k in data)row[k]=data[k];row.id=id;res=await sb.from('pins').insert(row)}
+      if(res.error)throw res.error;
+      await removePhotos(removedPaths);
+      if(editId){
+        var p=pins.filter(function(x){return x.id===editId})[0];
+        if(p){for(var k2 in data)p[k2]=data[k2]}
+      }else{
+        data.id=id;data.createdAt=Date.now();pins.unshift(data);
+      }
+      closeForm();render(false);
+      map.setView([data.lat,data.lng],Math.max(map.getZoom(),16));
+      if(markers[id])markers[id].openPopup();
+      toast('บันทึกแล้ว');
+    }catch(err){
+      removePhotos(uploaded);
+      formPhotos.forEach(function(x){if(uploaded.indexOf(x.path)>-1)x.path=null});
+      toast('บันทึกไม่สำเร็จ: '+errMsg(err));
+    }finally{
+      saving=false;btn.disabled=false;btn.textContent='บันทึก';
+    }
   };
-  $('fDel').onclick=function(){
+  $('fDel').onclick=async function(){
     var id=$('fId').value;
     if(!id||!confirm('ลบจุดนี้ (รวมรูปถ่าย)?'))return;
     var p=pins.filter(function(x){return x.id===id})[0];
-    (p&&p.photos||[]).forEach(function(pid){photoDel(pid).catch(function(){})});
-    pins=pins.filter(function(x){return x.id!==id});
-    save();closeForm();render(false);toast('ลบแล้ว');
+    try{
+      var r=await sb.from('pins').delete().eq('id',id);
+      if(r.error)throw r.error;
+      await removePhotos(p&&p.photos);
+      pins=pins.filter(function(x){return x.id!==id});
+      closeForm();render(false);toast('ลบแล้ว');
+    }catch(err){toast('ลบไม่สำเร็จ: '+errMsg(err))}
   };
   $('btnAdd').onclick=function(){getPos(function(ll){openForm({lat:ll[0],lng:ll[1]})})};
 
-  /* ---------- tap on map to choose a spot (แถบปุ่มอยู่นอกแผนที่) ---------- */
+  /* ---------- tap on map to choose a spot ---------- */
   var tempLatLng=null;
   function hideTemp(){
     if(tempMarker){map.removeLayer(tempMarker);tempMarker=null}
@@ -372,7 +456,7 @@
     $('viewerTitle').textContent=title(p);
     $('viewerBody').innerHTML='<div class="empty">กำลังโหลด...</div>';
     $('viewer').classList.add('open');
-    Promise.all(p.photos.map(function(id){return photoGet(id).catch(function(){return null})})).then(function(blobs){
+    Promise.all(p.photos.map(function(path){return photoGet(path).catch(function(){return null})})).then(function(blobs){
       viewUrls.forEach(revoke);viewUrls=[];
       var html=blobs.filter(Boolean).map(function(b){var u=URL.createObjectURL(b);viewUrls.push(u);return '<img src="'+u+'" alt="">'}).join('');
       $('viewerBody').innerHTML=html||'<div class="empty">ไม่พบรูป</div>';
@@ -385,7 +469,7 @@
   }
   $('viewerClose').onclick=closeViewer;
 
-  /* ---------- delegated clicks (popup / list buttons) ---------- */
+  /* ---------- delegated clicks ---------- */
   document.addEventListener('click',function(e){
     var t=e.target;if(!t.closest)return;
     var b=t.closest('[data-edit]');
@@ -406,8 +490,8 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-thumbs]'),function(el){
       var p=pins.filter(function(x){return x.id===el.getAttribute('data-thumbs')})[0];
       if(!p||!p.photos)return;
-      p.photos.forEach(function(id){
-        photoGet(id).then(function(b){
+      p.photos.forEach(function(path){
+        photoGet(path).then(function(b){
           if(!b||!document.body.contains(el))return;
           var u=URL.createObjectURL(b);listUrls.push(u);
           var im=document.createElement('img');im.src=u;im.alt='';im.setAttribute('data-view',p.id);el.appendChild(im);
@@ -424,75 +508,168 @@
     $('count').textContent=rows.length;
     $('list').innerHTML=rows.length?rows.map(function(p){
       var d=p.createdAt?new Date(p.createdAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'}):'';
+      var id=esc(p.id);
       return '<div class="item"><div class="t">'+esc(title(p))+'</div>'
         +(p.address&&p.name?'<div class="s">'+esc(p.address)+'</div>':'')
         +(p.phone?'<div class="s">โทร '+esc(p.phone)+'</div>':'')
         +(p.note?'<div class="s">'+esc(p.note)+'</div>':'')
         +(d?'<div class="s">บันทึกเมื่อ '+esc(d)+'</div>':'')
-        +(p.photos&&p.photos.length?'<div class="thumbs" data-thumbs="'+p.id+'"></div>':'')
+        +(p.photos&&p.photos.length?'<div class="thumbs" data-thumbs="'+id+'"></div>':'')
         +'<div class="acts"><a class="btn" target="_blank" rel="noopener" href="'+gmaps(p)+'">นำทาง</a>'
-        +'<button class="btn ghost" data-go="'+p.id+'">ดูบนแผนที่</button>'
-        +'<button class="btn ghost" data-edit="'+p.id+'">แก้ไข</button>'
+        +'<button class="btn ghost" data-go="'+id+'">ดูบนแผนที่</button>'
+        +'<button class="btn ghost" data-edit="'+id+'">แก้ไข</button>'
         +(p.phone?'<a class="btn ghost" href="tel:'+esc(p.phone)+'">โทร</a>':'')
         +'</div></div>';
     }).join(''):'<div class="empty">'+(pins.length?'ไม่พบรายการที่ค้นหา':'ยังไม่มีจุดส่งที่บันทึก<br>กดปุ่ม “ปักหมุดตรงนี้” หรือแตะบนแผนที่')+'</div>';
     if($('listBg').classList.contains('open'))hydrateThumbs();
   }
-  function openList(){$('listBg').classList.add('open');renderList()}
+  function localPinsCount(){try{var d=JSON.parse(localStorage.getItem(LOCAL_KEY));return Array.isArray(d)?d.length:0}catch(e){return 0}}
+  function openList(){
+    $('whoami').textContent=me&&me.email?('เข้าสู่ระบบเป็น '+me.email):'';
+    $('migrateRow').style.display=localPinsCount()?'flex':'none';
+    $('listBg').classList.add('open');renderList();
+  }
   function closeList(){$('listBg').classList.remove('open');listUrls.forEach(revoke);listUrls=[]}
   $('btnList').onclick=openList;
   $('btnCloseList').onclick=closeList;
+  $('btnLogout').onclick=function(){if(confirm('ออกจากระบบ?'))logout()};
   $('listBg').addEventListener('click',function(e){if(e.target===this)closeList()});
   $('q').addEventListener('input',function(){renderList()});
   $('q').addEventListener('keydown',function(e){if(e.key==='Enter'){e.target.blur();openList()}});
 
-  /* ---------- backup (รวมรูปถ่าย) ---------- */
-  $('btnExport').onclick=function(){
+  /* ---------- add pins in bulk (import backup / migrate old local data) ---------- */
+  // list: pin objects, getBlobs(pin) -> Promise<Blob[]> ; returns number added
+  async function addPinsBulk(list,getBlobs,onProgress){
+    var have={};pins.forEach(function(p){have[dedupeKey(p)]=1});
+    var fresh=list.filter(function(p){return p&&typeof p.lat==='number'&&typeof p.lng==='number'&&!have[dedupeKey(p)]});
+    var added=0;
+    for(var i=0;i<fresh.length;i++){
+      var p=fresh[i];
+      if(onProgress)onProgress(i+1,fresh.length);
+      var id=newId(),paths=[],up=[];
+      try{
+        var blobs=(await getBlobs(p))||[];
+        for(var j=0;j<blobs.length&&j<MAXP;j++){var pth=await uploadPhoto(id,blobs[j]);up.push(pth);paths.push(pth)}
+        var row={id:id,address:p.address||'',name:p.name||'',phone:p.phone||'',note:p.note||'',lat:p.lat,lng:p.lng,photos:paths};
+        var r=await sb.from('pins').insert(row);
+        if(r.error)throw r.error;
+        added++;
+      }catch(e){await removePhotos(up);throw e}
+    }
+    await loadPins();render(false);
+    return added;
+  }
+
+  /* ---------- backup ---------- */
+  $('btnExport').onclick=async function(){
     toast('กำลังเตรียมไฟล์สำรอง...');
-    Promise.all(pins.map(function(p){
-      var ids=p.photos||[];
-      return Promise.all(ids.map(function(id){return photoGet(id).then(function(b){return b?blobToDataURL(b):null}).catch(function(){return null})})).then(function(urls){
-        var c=JSON.parse(JSON.stringify(p));c.photoData={};
-        ids.forEach(function(id,i){if(urls[i])c.photoData[id]=urls[i]});
-        return c;
-      });
-    })).then(function(arr){
-      var blob=new Blob([JSON.stringify({version:2,pins:arr})],{type:'application/json'});
+    try{
+      var out=[];
+      for(var i=0;i<pins.length;i++){
+        var p=pins[i],c=JSON.parse(JSON.stringify(p));c.photoData={};
+        for(var j=0;j<(p.photos||[]).length;j++){
+          try{var b=await photoGet(p.photos[j]);var u=await blobToDataURL(b);if(u)c.photoData[p.photos[j]]=u}catch(e){}
+        }
+        out.push(c);
+      }
+      var blob=new Blob([JSON.stringify({version:3,pins:out})],{type:'application/json'});
       var a=document.createElement('a');a.href=URL.createObjectURL(blob);
       a.download='parcel-pins-'+new Date().toISOString().slice(0,10)+'.json';
       document.body.appendChild(a);a.click();a.remove();
       setTimeout(function(){revoke(a.href)},3000);
       toast('สำรองข้อมูลแล้ว');
-    }).catch(function(){toast('สำรองข้อมูลไม่สำเร็จ')});
+    }catch(e){toast('สำรองข้อมูลไม่สำเร็จ: '+errMsg(e))}
   };
   $('btnImport').onclick=function(){$('fileImport').click()};
   $('fileImport').onchange=function(){
-    var f=this.files[0];if(!f)return;
+    var f=this.files[0];this.value='';if(!f)return;
     var r=new FileReader();
-    r.onload=function(){
+    r.onload=async function(){
       var arr;
       try{var j=JSON.parse(r.result);arr=Array.isArray(j)?j:j.pins;if(!Array.isArray(arr))throw 0}catch(e){toast('ไฟล์ไม่ถูกต้อง');return}
-      var have={};pins.forEach(function(p){have[p.id]=1});
-      arr.forEach(migrate);
-      var fresh=arr.filter(function(p){return p&&p.id&&typeof p.lat==='number'&&typeof p.lng==='number'&&!have[p.id]});
-      Promise.all(fresh.map(function(p){
-        var pd=p.photoData||{};delete p.photoData;
-        var ids=Object.keys(pd);
-        return Promise.all(ids.map(function(id){
-          return fetch(pd[id]).then(function(x){return x.blob()}).then(function(b){return photoPut(id,b)}).catch(function(){});
-        })).then(function(){p.photos=(p.photos||[]).filter(function(id){return pd[id]})});
-      })).then(function(){
-        fresh.forEach(function(p){pins.push(p)});
-        save();render(true);toast('นำเข้า '+fresh.length+' รายการ');
-      });
+      arr.forEach(migrateOld);
+      try{
+        var n=await addPinsBulk(arr,async function(p){
+          var pd=p.photoData||{},ids=(p.photos||[]).filter(function(id){return pd[id]}),blobs=[];
+          for(var i=0;i<ids.length;i++){try{blobs.push(await (await fetch(pd[ids[i]])).blob())}catch(e){}}
+          return blobs;
+        },function(i,t){toast('กำลังนำเข้า '+i+'/'+t+' ...')});
+        toast('นำเข้า '+n+' รายการ');
+      }catch(e){toast('นำเข้าไม่สำเร็จ: '+errMsg(e))}
     };
-    r.readAsText(f);this.value='';
+    r.readAsText(f);
   };
 
-  render(true);
-  if(!pins.length&&navigator.geolocation){
-    navigator.geolocation.getCurrentPosition(function(pos){meLatLng=[pos.coords.latitude,pos.coords.longitude];showMe();map.setView(meLatLng,15)},function(){}, {timeout:8000});
+  /* ---------- migrate old on-device data (เวอร์ชันเก่าที่เก็บในเครื่อง) ---------- */
+  function oldPhotoGet(id){
+    return new Promise(function(res){
+      if(!window.indexedDB){res(null);return}
+      var rq=indexedDB.open('parcel_photos_v1',1);
+      rq.onupgradeneeded=function(){rq.result.createObjectStore('photos',{keyPath:'id'})};
+      rq.onerror=function(){res(null)};
+      rq.onsuccess=function(){
+        try{
+          var g=rq.result.transaction('photos','readonly').objectStore('photos').get(id);
+          g.onsuccess=function(){res(g.result&&g.result.blob||null)};g.onerror=function(){res(null)};
+        }catch(e){res(null)}
+      };
+    });
   }
+  async function migrateLocal(){
+    var d;try{d=JSON.parse(localStorage.getItem(LOCAL_KEY))}catch(e){d=null}
+    if(!Array.isArray(d)||!d.length){toast('ไม่พบข้อมูลเดิมในเครื่อง');return}
+    d.forEach(migrateOld);
+    try{
+      var n=await addPinsBulk(d,async function(p){
+        var blobs=[],ids=p.photos||[];
+        for(var i=0;i<ids.length;i++){var b=await oldPhotoGet(ids[i]);if(b)blobs.push(b)}
+        return blobs;
+      },function(i,t){toast('กำลังย้ายข้อมูล '+i+'/'+t+' ...')});
+      try{localStorage.setItem('parcel_migrated_'+me.id,'1')}catch(e){}
+      toast('ย้ายขึ้นระบบแล้ว '+n+' รายการ (ข้อมูลเดิมในเครื่องยังไม่ถูกลบ)');
+      $('migrateRow').style.display='none';
+    }catch(e){toast('ย้ายข้อมูลไม่สำเร็จ: '+errMsg(e))}
+  }
+  $('btnMigrate').onclick=function(){if(confirm('ย้ายข้อมูลเดิมที่บันทึกไว้ในเครื่องนี้ขึ้นระบบ?'))migrateLocal()};
+
+  /* ---------- boot ---------- */
+  var firstEnter=true, lastRefresh=0;
+  async function enter(){
+    gateMsg('กำลังโหลดข้อมูล...','');
+    try{
+      await loadPins();
+    }catch(e){gateError(errMsg(e));return}
+    hideGate();lastRefresh=Date.now();
+    render(firstEnter||true);
+    if(!pins.length&&navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(function(pos){meLatLng=[pos.coords.latitude,pos.coords.longitude];showMe();map.setView(meLatLng,15)},function(){}, {timeout:8000});
+    }
+    firstEnter=false;
+    var flag=null;try{flag=localStorage.getItem('parcel_migrated_'+me.id)}catch(e){}
+    var n=localPinsCount();
+    if(n&&!flag){
+      try{localStorage.setItem('parcel_migrated_'+me.id,'asked')}catch(e){}
+      if(confirm('พบข้อมูลเดิมที่บันทึกไว้ในเครื่อง '+n+' จุด ต้องการย้ายขึ้นระบบหรือไม่?'))migrateLocal();
+    }
+  }
+  async function boot(){
+    if(!CFG.SUPABASE_URL||!CFG.SUPABASE_ANON_KEY||/YOUR_SUPABASE/.test(CFG.SUPABASE_URL+CFG.SUPABASE_ANON_KEY)){gateConfig();return}
+    if(!window.supabase||!window.supabase.createClient){gateMsg('โหลดระบบฐานข้อมูลไม่สำเร็จ','ตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้านี้');return}
+    sb=window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY);
+    sb.auth.onAuthStateChange(function(ev){if(ev==='SIGNED_OUT'&&me){me=null;pins=[];render(false);showLogin()}});
+    try{
+      var r=await sb.auth.getSession();
+      if(r.data&&r.data.session){me=r.data.session.user;await enter()}else showLogin();
+    }catch(e){gateError(errMsg(e))}
+  }
+  // กลับมาเปิดแอปอีกครั้ง -> โหลดข้อมูลล่าสุด (ใช้ได้หลายเครื่อง)
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState!=='visible'||!me||saving)return;
+    if($('formBg').classList.contains('open')||Date.now()-lastRefresh<30000)return;
+    lastRefresh=Date.now();
+    loadPins().then(function(){render(false)}).catch(function(){});
+  });
+  boot();
   if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}
 })();
 </script>

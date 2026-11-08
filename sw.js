@@ -1,7 +1,7 @@
 // Service worker: เก็บตัวแอปไว้ในเครื่องเพื่อให้ติดตั้งและเปิดเร็ว
-// ข้อมูลพัสดุอยู่ใน localStorage ของเครื่องอยู่แล้ว ส่วนแผนที่ต้องใช้อินเทอร์เน็ต
-const CACHE = 'parcel-map-v1';
-const APP_FILES = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
+// ข้อมูลพัสดุเก็บบน Supabase (ต้องมีอินเทอร์เน็ต) ไฟล์นี้เก็บเฉพาะตัวแอปให้เปิดเร็ว
+const CACHE = 'parcel-map-v2';
+const APP_FILES = ['./', './index.html', './manifest.json', './config.js', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(APP_FILES)).then(() => self.skipWaiting()));

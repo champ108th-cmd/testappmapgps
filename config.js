@@ -1,0 +1,9 @@
+// ใส่ค่าจาก Supabase: Project Settings -> API
+//   SUPABASE_URL      = Project URL  (เช่น https://abcdefgh.supabase.co)
+//   SUPABASE_ANON_KEY = anon public key (ขึ้นต้นด้วย eyJ... หรือ sb_publishable_...)
+// ห้ามใช้ service_role key เด็ดขาด เพราะไฟล์นี้เปิดเผยต่อสาธารณะ
+// anon key ออกแบบมาให้เปิดเผยได้ ข้อมูลถูกป้องกันด้วยการล็อกอิน + RLS ที่ตั้งไว้ใน supabase-setup.sql
+window.APP_CONFIG = {
+  SUPABASE_URL: 'sb_publishable_id0i20vtznhw6RE-qWBvOQ_344Vjqxx',
+  SUPABASE_ANON_KEY: 'sb_publishable_id0i20vtznhw6RE-qWBvOQ_344Vjqxx'
+};
