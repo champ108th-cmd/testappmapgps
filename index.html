@@ -18,7 +18,7 @@
   #map{position:absolute;inset:0;z-index:0}
   .topbar{position:absolute;z-index:500;top:calc(env(safe-area-inset-top) + 10px);left:10px;right:10px;display:flex;gap:8px}
   .topbar input{flex:1;min-width:0;padding:12px 14px;border-radius:12px;border:0;font-size:16px;box-shadow:0 2px 10px rgba(0,0,0,.25);background:#fff}
-  .btn{border:0;border-radius:12px;padding:12px 14px;font-size:15px;font-weight:600;cursor:pointer;background:var(--brand);color:#fff}
+  .btn{border:0;border-radius:12px;padding:12px 14px;font-size:15px;font-weight:600;cursor:pointer;background:var(--brand);color:#fff;font-family:inherit}
   .btn:active{background:var(--brand-d)}
   .btn.light{background:#fff;color:var(--fg);box-shadow:0 2px 10px rgba(0,0,0,.25)}
   .btn.ghost{background:#f3f4f6;color:var(--fg)}
@@ -28,7 +28,7 @@
   .fab.main{width:auto;height:56px;border-radius:28px;padding:0 20px;background:var(--brand);color:#fff;font-size:16px;font-weight:700}
   .sheet-bg{position:fixed;inset:0;z-index:900;background:rgba(0,0,0,.45);display:none}
   .sheet-bg.open{display:block}
-  .sheet{position:absolute;left:0;right:0;bottom:0;max-height:88%;overflow:auto;background:#fff;border-radius:18px 18px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom) + 16px)}
+  .sheet{position:absolute;left:0;right:0;bottom:0;max-height:92%;overflow:auto;background:#fff;border-radius:18px 18px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom) + 16px)}
   .sheet h2{margin:0 0 12px;font-size:18px}
   label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
   .sheet input[type=text],.sheet input[type=tel],.sheet textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:16px;font-family:inherit}
@@ -45,15 +45,31 @@
   .pop .t{font-weight:700;font-size:15px}
   .pop .s{font-size:13px;color:var(--muted);margin:2px 0;white-space:pre-wrap}
   .pop .acts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
-  #toast{position:fixed;z-index:1000;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);transform:translateX(-50%);background:#111827;color:#fff;padding:10px 16px;border-radius:20px;font-size:14px;display:none;max-width:90%}
+  #toast{position:fixed;z-index:1200;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);transform:translateX(-50%);background:#111827;color:#fff;padding:10px 16px;border-radius:20px;font-size:14px;display:none;max-width:90%}
   .me{width:16px;height:16px;border-radius:50%;background:#2563eb;border:3px solid #fff;box-shadow:0 0 0 2px rgba(37,99,235,.4)}
+  /* photos */
+  .photos{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .photos .th{position:relative;width:84px;height:84px;border-radius:10px;overflow:hidden;background:#f3f4f6}
+  .photos .th img{width:100%;height:100%;object-fit:cover;display:block}
+  .photos .th button{position:absolute;top:3px;right:3px;width:26px;height:26px;border-radius:50%;border:0;background:rgba(17,24,39,.75);color:#fff;font-size:16px;line-height:1;cursor:pointer;padding:0}
+  .photo-btns{display:flex;gap:8px;margin-top:8px}
+  .photo-btns .btn{flex:1}
+  .thumbs{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  .thumbs img{width:64px;height:64px;object-fit:cover;border-radius:8px;cursor:pointer;background:#f3f4f6}
+  #viewer{position:fixed;inset:0;z-index:1100;background:#000;display:none;flex-direction:column}
+  #viewer.open{display:flex}
+  #viewer .vbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:calc(env(safe-area-inset-top) + 10px) 14px 10px;color:#fff}
+  #viewer .vbar span{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #viewerBody{flex:1;overflow:auto;padding:0 8px calc(env(safe-area-inset-bottom) + 12px)}
+  #viewerBody img{display:block;width:100%;max-width:900px;margin:0 auto 10px;border-radius:8px}
+  #viewerBody .empty{color:#fff}
 </style>
 </head>
 <body>
 <div id="map"></div>
 
 <div class="topbar">
-  <input id="q" type="search" placeholder="ค้นหา เลขพัสดุ / ชื่อลูกค้า / หมายเหตุ">
+  <input id="q" type="search" placeholder="ค้นหา ที่อยู่ / ชื่อลูกค้า / หมายเหตุ">
   <button class="btn light" id="btnList">รายการ</button>
 </div>
 
@@ -70,10 +86,20 @@
 <div class="sheet-bg" id="formBg"><div class="sheet" id="formSheet">
   <h2 id="formTitle">บันทึกจุดส่งพัสดุ</h2>
   <input type="hidden" id="fId">
-  <label>เลขพัสดุ</label><input type="text" id="fTrack" autocomplete="off" autocapitalize="characters">
+  <label>ที่อยู่</label><textarea id="fAddr" rows="2" autocomplete="off" placeholder="บ้านเลขที่ ซอย ถนน แขวง/ตำบล เขต/อำเภอ"></textarea>
   <label>ชื่อลูกค้า</label><input type="text" id="fName" autocomplete="off">
   <label>เบอร์โทร</label><input type="tel" id="fPhone" autocomplete="off">
   <label>หมายเหตุ (เช่น ฝากไว้กับ รปภ., บ้านสีเขียวท้ายซอย)</label><textarea id="fNote" rows="3"></textarea>
+
+  <label>รูปถ่าย (สูงสุด 3 รูป)</label>
+  <div class="photos" id="fPhotos"></div>
+  <div class="photo-btns" id="fPhotoAdd">
+    <button type="button" class="btn ghost" id="fCam">📷 ถ่ายรูป</button>
+    <button type="button" class="btn ghost" id="fPick">🖼 เลือกจากคลัง</button>
+  </div>
+  <input type="file" id="fCamIn" accept="image/*" capture="environment" style="display:none">
+  <input type="file" id="fPickIn" accept="image/*" multiple style="display:none">
+
   <div class="coord" id="fCoord"></div>
   <div class="row"><button class="btn ghost" id="fGps">ใช้ GPS ตอนนี้แทน</button></div>
   <div class="row">
@@ -94,21 +120,74 @@
   <input type="file" id="fileImport" accept="application/json" style="display:none">
 </div></div>
 
+<div id="viewer">
+  <div class="vbar"><span id="viewerTitle"></span><button class="btn light" id="viewerClose">ปิด</button></div>
+  <div id="viewerBody"></div>
+</div>
+
 <div id="toast"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 (function(){
   var KEY='parcel_pins_v1';
+  var MAXP=3;
   var pins=load();
-  function load(){try{var d=JSON.parse(localStorage.getItem(KEY));return Array.isArray(d)?d:[]}catch(e){return[]}}
+  function migrate(p){if(p&&p.track!==undefined){if(!p.address&&p.track)p.address=p.track;delete p.track}return p}
+  function load(){try{var d=JSON.parse(localStorage.getItem(KEY));return Array.isArray(d)?d.map(migrate):[]}catch(e){return[]}}
   function save(){try{localStorage.setItem(KEY,JSON.stringify(pins));return true}catch(e){toast('บันทึกไม่สำเร็จ พื้นที่เก็บข้อมูลเต็มหรือถูกบล็อก');return false}}
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
   function $(id){return document.getElementById(id)}
-  function toast(m){var t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(toast._t);toast._t=setTimeout(function(){t.style.display='none'},2600)}
+  function toast(m){var t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(toast._t);toast._t=setTimeout(function(){t.style.display='none'},3000)}
   function gmaps(p){return 'https://www.google.com/maps/dir/?api=1&destination='+p.lat+','+p.lng+'&travelmode=driving'}
   function amaps(p){return 'https://maps.apple.com/?daddr='+p.lat+','+p.lng+'&dirflg=d'}
-  function title(p){return p.track||p.name||'(ไม่มีชื่อ)'}
+  function title(p){return p.name||p.address||'(ไม่มีชื่อ)'}
+  function uid(prefix){return prefix+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+  function revoke(u){try{URL.revokeObjectURL(u)}catch(e){}}
+
+  /* ---------- photo storage (IndexedDB: รูปเก็บเป็นไฟล์ แยกจากข้อมูลหมุด) ---------- */
+  var dbp=null;
+  function idb(){
+    if(dbp)return dbp;
+    dbp=new Promise(function(res,rej){
+      if(!window.indexedDB){rej(new Error('เครื่องนี้ไม่รองรับการเก็บรูป'));return}
+      var r=indexedDB.open('parcel_photos_v1',1);
+      r.onupgradeneeded=function(){r.result.createObjectStore('photos',{keyPath:'id'})};
+      r.onsuccess=function(){res(r.result)};
+      r.onerror=function(){rej(r.error)};
+    });
+    dbp.catch(function(){dbp=null});
+    return dbp;
+  }
+  function tx(mode,fn){
+    return idb().then(function(db){
+      return new Promise(function(res,rej){
+        var t=db.transaction('photos',mode),req=fn(t.objectStore('photos'));
+        t.oncomplete=function(){res(req&&req.result)};
+        t.onerror=t.onabort=function(){rej(t.error||new Error('เก็บรูปไม่สำเร็จ'))};
+      });
+    });
+  }
+  function photoPut(id,blob){return tx('readwrite',function(s){return s.put({id:id,blob:blob})})}
+  function photoDel(id){return tx('readwrite',function(s){return s.delete(id)})}
+  function photoGet(id){return tx('readonly',function(s){return s.get(id)}).then(function(r){return r&&r.blob||null})}
+  function blobToDataURL(b){return new Promise(function(res){var r=new FileReader();r.onload=function(){res(r.result)};r.onerror=function(){res(null)};r.readAsDataURL(b)})}
+
+  // ย่อรูปให้ด้านยาวไม่เกิน 1024px เป็น JPEG เพื่อประหยัดพื้นที่
+  function compress(file){
+    return new Promise(function(res,rej){
+      var url=URL.createObjectURL(file),img=new Image();
+      img.onload=function(){
+        var w=img.naturalWidth,h=img.naturalHeight,k=Math.min(1,1024/Math.max(w,h));
+        var c=document.createElement('canvas');c.width=Math.max(1,Math.round(w*k));c.height=Math.max(1,Math.round(h*k));
+        c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+        revoke(url);
+        c.toBlob(function(b){b?res(b):rej(new Error('ย่อรูปไม่สำเร็จ'))},'image/jpeg',0.72);
+      };
+      img.onerror=function(){revoke(url);rej(new Error('อ่านรูปไม่ได้'))};
+      img.src=url;
+    });
+  }
 
   /* ---------- map ---------- */
   var map=L.map('map',{zoomControl:false}).setView([13.7563,100.5018],12);
@@ -118,12 +197,14 @@
   var meMarker=null, tempMarker=null, meLatLng=null;
 
   function popupHtml(p){
+    var n=(p.photos||[]).length;
     return '<div class="pop"><div class="t">'+esc(title(p))+'</div>'
-      +(p.track&&p.name?'<div class="s">'+esc(p.name)+'</div>':'')
+      +(p.address&&p.name?'<div class="s">'+esc(p.address)+'</div>':'')
       +(p.phone?'<div class="s">โทร '+esc(p.phone)+'</div>':'')
       +(p.note?'<div class="s">'+esc(p.note)+'</div>':'')
       +'<div class="acts"><a class="btn" target="_blank" rel="noopener" href="'+gmaps(p)+'">นำทาง</a>'
       +'<a class="btn ghost" target="_blank" rel="noopener" href="'+amaps(p)+'">Apple Maps</a>'
+      +(n?'<button class="btn ghost" data-view="'+p.id+'">🖼 ดูรูป ('+n+')</button>':'')
       +'<button class="btn ghost" data-edit="'+p.id+'">แก้ไข</button></div></div>';
   }
   function render(fit){
@@ -155,53 +236,111 @@
   $('btnLocate').onclick=function(){getPos(function(ll){map.setView(ll,Math.max(map.getZoom(),16));toast('พบตำแหน่งแล้ว')})};
 
   /* ---------- form ---------- */
-  var formPos=null;
+  var formPos=null, formPhotos=[], removedPhotos=[], formToken=0, saving=false;
   function setCoord(){$('fCoord').textContent=formPos?('พิกัด '+formPos.lat.toFixed(6)+', '+formPos.lng.toFixed(6)):''}
+  function clearFormPhotos(){formPhotos.forEach(function(x){revoke(x.url)});formPhotos=[]}
+  function renderFormPhotos(){
+    $('fPhotos').innerHTML=formPhotos.map(function(p,i){
+      return '<div class="th"><img src="'+p.url+'" alt=""><button type="button" data-rmphoto="'+i+'" aria-label="ลบรูป">×</button></div>';
+    }).join('');
+    $('fPhotoAdd').style.display=formPhotos.length>=MAXP?'none':'flex';
+  }
   function openForm(p){
     p=p||{};
+    clearFormPhotos();removedPhotos=[];
+    var tok=++formToken;
     $('fId').value=p.id||'';
-    $('fTrack').value=p.track||'';$('fName').value=p.name||'';
+    $('fAddr').value=p.address||'';$('fName').value=p.name||'';
     $('fPhone').value=p.phone||'';$('fNote').value=p.note||'';
     formPos={lat:p.lat,lng:p.lng};setCoord();
     $('formTitle').textContent=p.id?'แก้ไขจุดส่ง':'บันทึกจุดส่งพัสดุ';
     $('fDelRow').style.display=p.id?'flex':'none';
+    renderFormPhotos();
     $('formBg').classList.add('open');
     map.closePopup();
+    if(p.photos&&p.photos.length){
+      Promise.all(p.photos.map(function(id){
+        return photoGet(id).then(function(b){return b?{id:id,blob:b,url:URL.createObjectURL(b),isNew:false}:null}).catch(function(){return null});
+      })).then(function(arr){
+        if(tok!==formToken){arr.forEach(function(x){x&&revoke(x.url)});return}
+        formPhotos=arr.filter(Boolean).concat(formPhotos);renderFormPhotos();
+      });
+    }
   }
-  function closeForm(){$('formBg').classList.remove('open');if(tempMarker){map.removeLayer(tempMarker);tempMarker=null}tempLatLng=null}
+  function closeForm(){
+    formToken++;
+    $('formBg').classList.remove('open');
+    if(tempMarker){map.removeLayer(tempMarker);tempMarker=null}
+    tempLatLng=null;
+    clearFormPhotos();removedPhotos=[];renderFormPhotos();
+  }
   $('fCancel').onclick=closeForm;
   $('formBg').addEventListener('click',function(e){if(e.target===this)closeForm()});
   $('fGps').onclick=function(){getPos(function(ll){formPos={lat:ll[0],lng:ll[1]};setCoord();toast('อัปเดตพิกัดจาก GPS แล้ว')})};
+
+  // เพิ่มรูป
+  function addFiles(files){
+    var list=Array.prototype.slice.call(files||[]);
+    var room=MAXP-formPhotos.length;
+    if(!list.length)return;
+    if(list.length>room){toast('เพิ่มได้สูงสุด '+MAXP+' รูป');list=list.slice(0,Math.max(room,0))}
+    var tok=formToken;
+    Promise.all(list.map(function(f){return compress(f)})).then(function(blobs){
+      if(tok!==formToken)return;
+      blobs.forEach(function(b){formPhotos.push({id:uid('ph'),blob:b,url:URL.createObjectURL(b),isNew:true})});
+      renderFormPhotos();
+    }).catch(function(err){toast('เพิ่มรูปไม่สำเร็จ: '+(err&&err.message||err))});
+  }
+  $('fCam').onclick=function(){$('fCamIn').click()};
+  $('fPick').onclick=function(){$('fPickIn').click()};
+  $('fCamIn').onchange=function(){addFiles(this.files);this.value=''};
+  $('fPickIn').onchange=function(){addFiles(this.files);this.value=''};
+  $('fPhotos').addEventListener('click',function(e){
+    var b=e.target.closest&&e.target.closest('[data-rmphoto]');if(!b)return;
+    var item=formPhotos.splice(parseInt(b.getAttribute('data-rmphoto'),10),1)[0];
+    if(item){if(!item.isNew)removedPhotos.push(item.id);revoke(item.url)}
+    renderFormPhotos();
+  });
+
   $('fSave').onclick=function(){
-   try{
+    if(saving)return;
     if(!formPos||typeof formPos.lat!=='number'){toast('ยังไม่มีพิกัด');return}
-    var id=$('fId').value;
-    var data={track:$('fTrack').value.trim(),name:$('fName').value.trim(),phone:$('fPhone').value.trim(),note:$('fNote').value.trim(),lat:formPos.lat,lng:formPos.lng};
-    if(!data.track&&!data.name){toast('กรอกเลขพัสดุหรือชื่อลูกค้าอย่างน้อย 1 อย่าง');return}
-    if(id){
-      var p=pins.filter(function(x){return x.id===id})[0];
-      if(p){for(var k in data)p[k]=data[k]}
-    }else{
-      data.id='p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-      data.createdAt=Date.now();
-      pins.unshift(data);id=data.id;
-    }
-    if(!save())return;
-    closeForm();render(false);
-    map.setView([data.lat,data.lng],Math.max(map.getZoom(),16));
-    if(markers[id])markers[id].openPopup();
-    toast('บันทึกแล้ว');
-   }catch(err){toast('เกิดข้อผิดพลาด: '+(err&&err.message||err))}
+    var data={address:$('fAddr').value.trim(),name:$('fName').value.trim(),phone:$('fPhone').value.trim(),note:$('fNote').value.trim(),lat:formPos.lat,lng:formPos.lng};
+    if(!data.address&&!data.name){toast('กรอกที่อยู่หรือชื่อลูกค้าอย่างน้อย 1 อย่าง');return}
+    saving=true;
+    var newOnes=formPhotos.filter(function(x){return x.isNew}), rem=removedPhotos.slice();
+    Promise.all(newOnes.map(function(x){return photoPut(x.id,x.blob)}))
+      .then(function(){return Promise.all(rem.map(function(id){return photoDel(id).catch(function(){})}))})
+      .then(function(){
+        data.photos=formPhotos.map(function(x){return x.id});
+        var id=$('fId').value;
+        if(id){
+          var p=pins.filter(function(x){return x.id===id})[0];
+          if(p){for(var k in data)p[k]=data[k]}
+        }else{
+          data.id=uid('p');data.createdAt=Date.now();
+          pins.unshift(data);id=data.id;
+        }
+        if(!save())return;
+        closeForm();render(false);
+        map.setView([data.lat,data.lng],Math.max(map.getZoom(),16));
+        if(markers[id])markers[id].openPopup();
+        toast('บันทึกแล้ว');
+      })
+      .catch(function(err){toast('บันทึกไม่สำเร็จ: '+(err&&err.message||err))})
+      .then(function(){saving=false});
   };
   $('fDel').onclick=function(){
     var id=$('fId').value;
-    if(!id||!confirm('ลบจุดนี้?'))return;
+    if(!id||!confirm('ลบจุดนี้ (รวมรูปถ่าย)?'))return;
+    var p=pins.filter(function(x){return x.id===id})[0];
+    (p&&p.photos||[]).forEach(function(pid){photoDel(pid).catch(function(){})});
     pins=pins.filter(function(x){return x.id!==id});
     save();closeForm();render(false);toast('ลบแล้ว');
   };
   $('btnAdd').onclick=function(){getPos(function(ll){openForm({lat:ll[0],lng:ll[1]})})};
 
-  /* tap on map to choose a spot -> action bar OUTSIDE the map (more reliable than a Leaflet popup) */
+  /* ---------- tap on map to choose a spot (แถบปุ่มอยู่นอกแผนที่) ---------- */
   var tempLatLng=null;
   function hideTemp(){
     if(tempMarker){map.removeLayer(tempMarker);tempMarker=null}
@@ -225,11 +364,35 @@
   };
   $('tempCancel').onclick=hideTemp;
 
-  /* ---------- popup edit button ---------- */
+  /* ---------- photo viewer ---------- */
+  var viewUrls=[];
+  function openViewer(pinId){
+    var p=pins.filter(function(x){return x.id===pinId})[0];
+    if(!p||!p.photos||!p.photos.length)return;
+    $('viewerTitle').textContent=title(p);
+    $('viewerBody').innerHTML='<div class="empty">กำลังโหลด...</div>';
+    $('viewer').classList.add('open');
+    Promise.all(p.photos.map(function(id){return photoGet(id).catch(function(){return null})})).then(function(blobs){
+      viewUrls.forEach(revoke);viewUrls=[];
+      var html=blobs.filter(Boolean).map(function(b){var u=URL.createObjectURL(b);viewUrls.push(u);return '<img src="'+u+'" alt="">'}).join('');
+      $('viewerBody').innerHTML=html||'<div class="empty">ไม่พบรูป</div>';
+    });
+  }
+  function closeViewer(){
+    $('viewer').classList.remove('open');
+    $('viewerBody').innerHTML='';
+    viewUrls.forEach(revoke);viewUrls=[];
+  }
+  $('viewerClose').onclick=closeViewer;
+
+  /* ---------- delegated clicks (popup / list buttons) ---------- */
   document.addEventListener('click',function(e){
-    var b=e.target.closest&&e.target.closest('[data-edit]');
-    if(b){var p=pins.filter(function(x){return x.id===b.getAttribute('data-edit')})[0];if(p)openForm(p)}
-    var g=e.target.closest&&e.target.closest('[data-go]');
+    var t=e.target;if(!t.closest)return;
+    var b=t.closest('[data-edit]');
+    if(b){var p=pins.filter(function(x){return x.id===b.getAttribute('data-edit')})[0];if(p){closeList();openForm(p)}return}
+    var v=t.closest('[data-view]');
+    if(v){openViewer(v.getAttribute('data-view'));return}
+    var g=t.closest('[data-go]');
     if(g){
       var q=pins.filter(function(x){return x.id===g.getAttribute('data-go')})[0];
       if(q){closeList();map.setView([q.lat,q.lng],17);if(markers[q.id])markers[q.id].openPopup()}
@@ -237,59 +400,91 @@
   });
 
   /* ---------- list ---------- */
+  var listUrls=[];
+  function hydrateThumbs(){
+    listUrls.forEach(revoke);listUrls=[];
+    Array.prototype.forEach.call(document.querySelectorAll('[data-thumbs]'),function(el){
+      var p=pins.filter(function(x){return x.id===el.getAttribute('data-thumbs')})[0];
+      if(!p||!p.photos)return;
+      p.photos.forEach(function(id){
+        photoGet(id).then(function(b){
+          if(!b||!document.body.contains(el))return;
+          var u=URL.createObjectURL(b);listUrls.push(u);
+          var im=document.createElement('img');im.src=u;im.alt='';im.setAttribute('data-view',p.id);el.appendChild(im);
+        }).catch(function(){});
+      });
+    });
+  }
   function renderList(){
     var term=$('q').value.trim().toLowerCase();
     var rows=pins.filter(function(p){
       if(!term)return true;
-      return [p.track,p.name,p.phone,p.note].join(' ').toLowerCase().indexOf(term)>-1;
+      return [p.address,p.name,p.phone,p.note].join(' ').toLowerCase().indexOf(term)>-1;
     });
     $('count').textContent=rows.length;
     $('list').innerHTML=rows.length?rows.map(function(p){
       var d=p.createdAt?new Date(p.createdAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'}):'';
       return '<div class="item"><div class="t">'+esc(title(p))+'</div>'
-        +(p.track&&p.name?'<div class="s">'+esc(p.name)+'</div>':'')
+        +(p.address&&p.name?'<div class="s">'+esc(p.address)+'</div>':'')
         +(p.phone?'<div class="s">โทร '+esc(p.phone)+'</div>':'')
         +(p.note?'<div class="s">'+esc(p.note)+'</div>':'')
         +(d?'<div class="s">บันทึกเมื่อ '+esc(d)+'</div>':'')
+        +(p.photos&&p.photos.length?'<div class="thumbs" data-thumbs="'+p.id+'"></div>':'')
         +'<div class="acts"><a class="btn" target="_blank" rel="noopener" href="'+gmaps(p)+'">นำทาง</a>'
         +'<button class="btn ghost" data-go="'+p.id+'">ดูบนแผนที่</button>'
         +'<button class="btn ghost" data-edit="'+p.id+'">แก้ไข</button>'
         +(p.phone?'<a class="btn ghost" href="tel:'+esc(p.phone)+'">โทร</a>':'')
         +'</div></div>';
     }).join(''):'<div class="empty">'+(pins.length?'ไม่พบรายการที่ค้นหา':'ยังไม่มีจุดส่งที่บันทึก<br>กดปุ่ม “ปักหมุดตรงนี้” หรือแตะบนแผนที่')+'</div>';
+    if($('listBg').classList.contains('open'))hydrateThumbs();
   }
-  function openList(){renderList();$('listBg').classList.add('open')}
-  function closeList(){$('listBg').classList.remove('open')}
+  function openList(){$('listBg').classList.add('open');renderList()}
+  function closeList(){$('listBg').classList.remove('open');listUrls.forEach(revoke);listUrls=[]}
   $('btnList').onclick=openList;
   $('btnCloseList').onclick=closeList;
   $('listBg').addEventListener('click',function(e){if(e.target===this)closeList()});
   $('q').addEventListener('input',function(){renderList()});
   $('q').addEventListener('keydown',function(e){if(e.key==='Enter'){e.target.blur();openList()}});
-  // edit from list: close list first
-  $('list').addEventListener('click',function(e){if(e.target.closest&&e.target.closest('[data-edit]'))closeList()});
 
-  /* ---------- backup ---------- */
+  /* ---------- backup (รวมรูปถ่าย) ---------- */
   $('btnExport').onclick=function(){
-    var blob=new Blob([JSON.stringify(pins,null,2)],{type:'application/json'});
-    var a=document.createElement('a');a.href=URL.createObjectURL(blob);
-    a.download='parcel-pins-'+new Date().toISOString().slice(0,10)+'.json';
-    document.body.appendChild(a);a.click();a.remove();
-    setTimeout(function(){URL.revokeObjectURL(a.href)},2000);
+    toast('กำลังเตรียมไฟล์สำรอง...');
+    Promise.all(pins.map(function(p){
+      var ids=p.photos||[];
+      return Promise.all(ids.map(function(id){return photoGet(id).then(function(b){return b?blobToDataURL(b):null}).catch(function(){return null})})).then(function(urls){
+        var c=JSON.parse(JSON.stringify(p));c.photoData={};
+        ids.forEach(function(id,i){if(urls[i])c.photoData[id]=urls[i]});
+        return c;
+      });
+    })).then(function(arr){
+      var blob=new Blob([JSON.stringify({version:2,pins:arr})],{type:'application/json'});
+      var a=document.createElement('a');a.href=URL.createObjectURL(blob);
+      a.download='parcel-pins-'+new Date().toISOString().slice(0,10)+'.json';
+      document.body.appendChild(a);a.click();a.remove();
+      setTimeout(function(){revoke(a.href)},3000);
+      toast('สำรองข้อมูลแล้ว');
+    }).catch(function(){toast('สำรองข้อมูลไม่สำเร็จ')});
   };
   $('btnImport').onclick=function(){$('fileImport').click()};
   $('fileImport').onchange=function(){
     var f=this.files[0];if(!f)return;
     var r=new FileReader();
     r.onload=function(){
-      try{
-        var arr=JSON.parse(r.result);if(!Array.isArray(arr))throw 0;
-        var have={};pins.forEach(function(p){have[p.id]=1});
-        var n=0;
-        arr.forEach(function(p){
-          if(p&&p.id&&typeof p.lat==='number'&&typeof p.lng==='number'&&!have[p.id]){pins.push(p);n++}
-        });
-        save();render(true);toast('นำเข้า '+n+' รายการ');
-      }catch(e){toast('ไฟล์ไม่ถูกต้อง')}
+      var arr;
+      try{var j=JSON.parse(r.result);arr=Array.isArray(j)?j:j.pins;if(!Array.isArray(arr))throw 0}catch(e){toast('ไฟล์ไม่ถูกต้อง');return}
+      var have={};pins.forEach(function(p){have[p.id]=1});
+      arr.forEach(migrate);
+      var fresh=arr.filter(function(p){return p&&p.id&&typeof p.lat==='number'&&typeof p.lng==='number'&&!have[p.id]});
+      Promise.all(fresh.map(function(p){
+        var pd=p.photoData||{};delete p.photoData;
+        var ids=Object.keys(pd);
+        return Promise.all(ids.map(function(id){
+          return fetch(pd[id]).then(function(x){return x.blob()}).then(function(b){return photoPut(id,b)}).catch(function(){});
+        })).then(function(){p.photos=(p.photos||[]).filter(function(id){return pd[id]})});
+      })).then(function(){
+        fresh.forEach(function(p){pins.push(p)});
+        save();render(true);toast('นำเข้า '+fresh.length+' รายการ');
+      });
     };
     r.readAsText(f);this.value='';
   };
