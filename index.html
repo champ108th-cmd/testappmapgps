@@ -47,6 +47,12 @@
   .pop .s{font-size:13px;color:var(--muted);margin:2px 0;white-space:pre-wrap}
   .pop .acts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
   #toast{position:fixed;z-index:1200;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);transform:translateX(-50%);background:#111827;color:#fff;padding:10px 16px;border-radius:20px;font-size:14px;display:none;max-width:90%}
+  .rbar{display:none;position:absolute;z-index:650;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 16px);background:#fff;border-radius:16px;padding:12px 14px;box-shadow:0 4px 18px rgba(0,0,0,.3);flex-direction:column;gap:10px}
+  .rbar .rt{font-weight:700;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rbar .rs{font-size:14px;color:var(--muted);margin-top:2px}
+  .rbar .racts{display:flex;gap:8px;flex-wrap:wrap}
+  .rbar .racts .btn{padding:10px 12px;font-size:14px;text-decoration:none;display:inline-block;text-align:center}
+  .rbar .racts a.btn{flex:1}
   .me{width:16px;height:16px;border-radius:50%;background:#2563eb;border:3px solid #fff;box-shadow:0 0 0 2px rgba(37,99,235,.4)}
   /* photos */
   .photos{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
@@ -90,6 +96,15 @@
 <div id="tempBar" style="display:none;position:absolute;z-index:600;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 16px);gap:10px">
   <button class="btn light" id="tempCancel" style="flex:0 0 auto">ยกเลิก</button>
   <button class="btn" id="tempSave" style="flex:1;height:56px;font-size:16px">📍 บันทึกจุดนี้</button>
+</div>
+
+<div class="rbar" id="routeBar">
+  <div><div class="rt" id="routeTitle"></div><div class="rs" id="routeSub"></div></div>
+  <div class="racts">
+    <a class="btn" id="routeG" target="_blank" rel="noopener">เปิด Google Maps</a>
+    <button class="btn ghost" id="routeRe">คำนวณใหม่</button>
+    <button class="btn danger" id="routeX">ปิดเส้นทาง</button>
+  </div>
 </div>
 
 <div class="sheet-bg" id="formBg"><div class="sheet" id="formSheet">
@@ -139,12 +154,37 @@
   <div id="viewerBody"></div>
 </div>
 
-<div id="gate"><div class="gate-box" id="gateBox"></div></div>
+<div id="gate"><div class="gate-box" id="gateBox" data-init="1"><h1>📦 จุดส่งพัสดุ</h1><p>กำลังเริ่มระบบ... ถ้าหน้านี้ค้างนานเกิน 10 วินาที ให้รีเฟรชหน้า</p></div></div>
 <div id="toast"></div>
 
+<script>
+// แสดงข้อผิดพลาดบนหน้าจอ (แทนหน้าว่างเปล่า) ถ้ามีไฟล์โหลดไม่ได้หรือโค้ดพัง
+(function(){
+  function show(t,m){
+    var g=document.getElementById('gate'),b=document.getElementById('gateBox');
+    if(!g||!b||g.style.display==='none')return;
+    if(b.getAttribute('data-final')||!b.hasAttribute('data-init'))return;   // ทำงานเฉพาะตอนแอปยังไม่ได้เข้าควบคุมหน้านี้
+    b.setAttribute('data-final','1');
+    var h=document.createElement('h1');h.textContent=t;
+    var p=document.createElement('p');p.textContent=m;p.style.whiteSpace='pre-wrap';
+    b.innerHTML='';b.appendChild(h);b.appendChild(p);
+  }
+  window.addEventListener('error',function(e){
+    var el=e.target;
+    if(el&&el!==window&&el.tagName){
+      // สนใจเฉพาะไฟล์ script/css ที่โหลดไม่ได้ (รูปแผนที่/รูปอื่นโหลดพลาดเป็นเรื่องปกติ ไม่ต้องขึ้นหน้า error)
+      if(el.tagName!=='SCRIPT'&&!(el.tagName==='LINK'&&/stylesheet/i.test(el.rel||'')))return;
+      show('โหลดไฟล์ไม่สำเร็จ','ไม่สามารถโหลด: '+(el.src||el.href)+'\nตรวจสอบอินเทอร์เน็ต และว่าไฟล์อยู่ครบใน GitHub แล้วรีเฟรช');return}
+    show('เกิดข้อผิดพลาดในแอป',(e.message||'unknown')+(e.filename?'\n('+e.filename.split('/').pop()+':'+e.lineno+')':''));
+  },true);
+  window.addEventListener('unhandledrejection',function(e){
+    var r=e.reason;show('เกิดข้อผิดพลาดในแอป',(r&&r.message)||String(r));
+  });
+})();
+</script>
 <script src="config.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 (function(){
   var BUCKET='pin-photos', MAXP=3;
@@ -216,15 +256,15 @@
   }
 
   /* ---------- gate (login / status) ---------- */
-  function showGate(html){$('gateBox').innerHTML=html;$('gate').style.display='flex'}
+  function showGate(html){var b=$('gateBox');b.removeAttribute('data-init');b.removeAttribute('data-final');b.innerHTML=html;$('gate').style.display='flex'}
   function hideGate(){$('gate').style.display='none'}
-  function gateMsg(t,msg){showGate('<h1>'+esc(t)+'</h1><p>'+esc(msg)+'</p>')}
+  function gateMsg(t,msg){showGate('<h1>'+esc(t)+'</h1><p style="white-space:pre-wrap">'+esc(msg)+'</p>')}
   function gateConfig(){
     showGate('<h1>ยังไม่ได้ตั้งค่า Supabase</h1>'
       +'<p>เปิดไฟล์ <code>config.js</code> แล้วใส่ <code>SUPABASE_URL</code> และ <code>SUPABASE_ANON_KEY</code> จาก Supabase (Project Settings → API) จากนั้นอัปโหลดไฟล์ขึ้น GitHub ใหม่</p>');
   }
   function gateError(msg){
-    showGate('<h1>เชื่อมต่อไม่สำเร็จ</h1><p>'+esc(msg)+'</p>'
+    showGate('<h1>เชื่อมต่อไม่สำเร็จ</h1><p style="white-space:pre-wrap">'+esc(msg)+'</p>'
       +'<button class="btn" id="gRetry">ลองใหม่</button>'
       +'<button class="btn ghost" id="gOut">ออกจากระบบ</button>');
     $('gRetry').onclick=function(){enter()};
@@ -255,7 +295,7 @@
   async function logout(){
     try{await sb.auth.signOut()}catch(e){}
     me=null;pins=[];photoCache={};
-    closeList();closeForm();closeViewer();hideTemp();render(false);
+    closeList();closeForm();closeViewer();hideTemp();stopRoute();render(false);
     showLogin();
   }
 
@@ -275,6 +315,7 @@
       +'<div class="acts"><a class="btn" target="_blank" rel="noopener" href="'+gmaps(p)+'">นำทาง</a>'
       +'<a class="btn ghost" target="_blank" rel="noopener" href="'+amaps(p)+'">Apple Maps</a>'
       +(n?'<button class="btn ghost" data-view="'+esc(p.id)+'">🖼 ดูรูป ('+n+')</button>':'')
+      +'<button class="btn ghost" data-route="'+esc(p.id)+'">🧭 เส้นทางในแอป</button>'
       +'<button class="btn ghost" data-edit="'+esc(p.id)+'">แก้ไข</button></div></div>';
   }
   function render(fit){
@@ -433,6 +474,7 @@
     document.querySelector('.fabs').style.display='';
   }
   map.on('click',function(e){
+    if(routePin)return;   // ขณะแสดงเส้นทางอยู่ ไม่เปิดแถบปักหมุด
     if(tempMarker)map.removeLayer(tempMarker);
     tempLatLng=e.latlng;
     tempMarker=L.marker(e.latlng,{opacity:.85,interactive:false}).addTo(map);
@@ -469,11 +511,106 @@
   }
   $('viewerClose').onclick=closeViewer;
 
+  /* ---------- in-app route (OpenRouteService) ---------- */
+  var ORS_URL='https://api.openrouteservice.org/v2/directions/driving-car/geojson';
+  var routeLayer=null, routePin=null, routeSeq=0, watchId=null, arrivedToast=false;
+  function fmtDist(m){return m>=1000?(m/1000).toFixed(m>=10000?0:1)+' กม.':Math.round(m)+' ม.'}
+  function fmtTime(s){
+    var mins=Math.max(1,Math.round(s/60));
+    if(mins<60)return mins+' นาที';
+    var h=Math.floor(mins/60),m=mins%60;
+    return h+' ชม.'+(m?' '+m+' นาที':'');
+  }
+  function orsKey(){var k=cleanStr(CFG.ORS_API_KEY);return(!k||/YOUR_/i.test(k))?'':k}
+  function orsError(status,body){
+    var msg=(body&&body.error&&(body.error.message||body.error))||'';
+    var code=body&&body.error&&body.error.code;
+    if(status===401||status===403)return 'ORS_API_KEY ไม่ถูกต้องหรือถูกปิดใช้งาน ตรวจสอบใน config.js';
+    if(status===429)return 'ใช้ ORS เกินโควตา (ต่อนาทีหรือต่อวัน) รอสักครู่แล้วลองใหม่';
+    if(code===2010||/routable point/i.test(String(msg)))return 'หาถนนใกล้จุดนี้ไม่เจอ ลองปักหมุดให้ใกล้ถนนมากขึ้น';
+    if(code===2004||/exceed/i.test(String(msg)))return 'ระยะทางไกลเกินที่ ORS คำนวณให้ได้';
+    return 'คำนวณเส้นทางไม่สำเร็จ ('+status+') '+(typeof msg==='string'?msg:'');
+  }
+  function setRouteUI(on){
+    $('routeBar').style.display=on?'flex':'none';
+    document.querySelector('.fabs').style.display=on?'none':'';
+    if(on){$('tempBar').style.display='none'}
+  }
+  function updateRouteSub(sum){
+    var base=sum?(fmtDist(sum.distance)+' · '+fmtTime(sum.duration)):'';
+    var line='';
+    if(meLatLng&&routePin){line=' · ห่างเส้นตรง '+fmtDist(map.distance(meLatLng,[routePin.lat,routePin.lng]))}
+    $('routeSub').textContent=base+line;
+    if(sum)$('routeSub')._base=base;
+  }
+  function startWatch(){
+    if(watchId!==null||!navigator.geolocation)return;
+    watchId=navigator.geolocation.watchPosition(function(pos){
+      meLatLng=[pos.coords.latitude,pos.coords.longitude];showMe();
+      if(routePin){
+        var d=map.distance(meLatLng,[routePin.lat,routePin.lng]);
+        var base=$('routeSub')._base||'';
+        $('routeSub').textContent=base+' · ห่างเส้นตรง '+fmtDist(d);
+        if(d<30&&!arrivedToast){arrivedToast=true;toast('ถึงจุดหมายแล้ว')}
+      }
+    },function(){},{enableHighAccuracy:true,maximumAge:5000,timeout:20000});
+  }
+  function stopWatch(){if(watchId!==null){try{navigator.geolocation.clearWatch(watchId)}catch(e){}watchId=null}}
+  function stopRoute(){
+    routeSeq++;
+    if(routeLayer){map.removeLayer(routeLayer);routeLayer=null}
+    routePin=null;arrivedToast=false;
+    stopWatch();setRouteUI(false);
+  }
+  async function fetchRoute(from,pin){
+    var key=orsKey();
+    var seq=++routeSeq;
+    var ctrl=new AbortController(),to=setTimeout(function(){ctrl.abort()},20000);
+    try{
+      var res=await fetch(ORS_URL,{
+        method:'POST',signal:ctrl.signal,
+        headers:{'Authorization':key,'Content-Type':'application/json','Accept':'application/geo+json, application/json'},
+        body:JSON.stringify({coordinates:[[from[1],from[0]],[pin.lng,pin.lat]],radiuses:[500,500]})
+      });
+      var j=null;try{j=await res.json()}catch(e){}
+      if(seq!==routeSeq)return;
+      if(!res.ok)throw new Error(orsError(res.status,j));
+      var f=j&&j.features&&j.features[0];
+      if(!f||!f.geometry)throw new Error('ไม่ได้รับเส้นทางจาก ORS');
+      if(routeLayer)map.removeLayer(routeLayer);
+      routeLayer=L.geoJSON(f,{style:{color:'#2563eb',weight:6,opacity:.85}}).addTo(map);
+      routePin=pin;arrivedToast=false;
+      $('routeTitle').textContent='ไปที่ '+title(pin);
+      $('routeG').href=gmaps(pin);
+      setRouteUI(true);
+      updateRouteSub(f.properties.summary);
+      try{map.fitBounds(routeLayer.getBounds(),{padding:[70,70]})}catch(e){}
+      startWatch();
+    }catch(e){
+      if(seq!==routeSeq)return;
+      toast(e&&e.name==='AbortError'?'ORS ตอบช้าเกินไป ลองใหม่อีกครั้ง':(e instanceof TypeError?'ติดต่อ ORS ไม่ได้ ตรวจสอบอินเทอร์เน็ต':errMsg(e)));
+    }finally{clearTimeout(to)}
+  }
+  function startRoute(pinId){
+    var pin=pins.filter(function(x){return x.id===pinId})[0];if(!pin)return;
+    if(!orsKey()){toast('ยังไม่ได้ใส่ ORS_API_KEY ใน config.js');return}
+    closeList();map.closePopup();hideTemp();
+    getPos(function(ll){fetchRoute(ll,pin)});
+  }
+  $('routeRe').onclick=function(){
+    if(!routePin)return;
+    var pin=routePin;
+    getPos(function(ll){fetchRoute(ll,pin)});
+  };
+  $('routeX').onclick=stopRoute;
+
   /* ---------- delegated clicks ---------- */
   document.addEventListener('click',function(e){
     var t=e.target;if(!t.closest)return;
     var b=t.closest('[data-edit]');
     if(b){var p=pins.filter(function(x){return x.id===b.getAttribute('data-edit')})[0];if(p){closeList();openForm(p)}return}
+    var rt=t.closest('[data-route]');
+    if(rt){startRoute(rt.getAttribute('data-route'));return}
     var v=t.closest('[data-view]');
     if(v){openViewer(v.getAttribute('data-view'));return}
     var g=t.closest('[data-go]');
@@ -516,6 +653,7 @@
         +(d?'<div class="s">บันทึกเมื่อ '+esc(d)+'</div>':'')
         +(p.photos&&p.photos.length?'<div class="thumbs" data-thumbs="'+id+'"></div>':'')
         +'<div class="acts"><a class="btn" target="_blank" rel="noopener" href="'+gmaps(p)+'">นำทาง</a>'
+        +'<button class="btn ghost" data-route="'+id+'">🧭 เส้นทางในแอป</button>'
         +'<button class="btn ghost" data-go="'+id+'">ดูบนแผนที่</button>'
         +'<button class="btn ghost" data-edit="'+id+'">แก้ไข</button>'
         +(p.phone?'<a class="btn ghost" href="tel:'+esc(p.phone)+'">โทร</a>':'')
@@ -652,15 +790,50 @@
       if(confirm('พบข้อมูลเดิมที่บันทึกไว้ในเครื่อง '+n+' จุด ต้องการย้ายขึ้นระบบหรือไม่?'))migrateLocal();
     }
   }
+  /* config normalisation: ตัดช่องว่าง/เครื่องหมายคำพูด, เติม https://, ดึง URL จากลิงก์ Dashboard, ตรวจ key ผิดชนิด */
+  function cleanStr(x){return String(x==null?'':x).replace(/[\s'"“”‘’]/g,'')}
+  function normUrl(u){
+    u=cleanStr(u);if(!u)return '';
+    var m=u.match(/supabase\.com\/dashboard\/project\/([a-z0-9]+)/i);
+    if(m)return 'https://'+m[1].toLowerCase()+'.supabase.co';
+    if(!/^https?:\/\//i.test(u)){u=(/^[a-z0-9]{15,30}$/i.test(u)?u+'.supabase.co':u);u='https://'+u}
+    try{var o=new URL(u);return o.hostname.indexOf('.')>0?o.origin:''}catch(e){return ''}
+  }
+  function keyProblem(k){
+    if(!k)return 'ยังไม่ได้ใส่ SUPABASE_ANON_KEY';
+    if(/^sb_secret_/i.test(k))return 'คุณใส่ secret key ซึ่งห้ามใช้ในแอปนี้ ให้ใช้ anon public key (หรือ publishable key) แทน';
+    var parts=k.split('.');
+    if(parts.length===3){
+      try{
+        var pl=JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')));
+        if(pl.role==='service_role')return 'คุณใส่ service_role key ซึ่งห้ามใช้ในแอปนี้ ให้ใช้ anon public key แทน (และควรสร้าง key ใหม่ เพราะ key นี้เปิดเผยแล้ว)';
+      }catch(e){}
+    }else if(!/^sb_publishable_/i.test(k)){
+      return 'รูปแบบ key ไม่ถูกต้อง (ควรขึ้นต้นด้วย eyJ... หรือ sb_publishable_...)';
+    }
+    return '';
+  }
+  function diagLine(){return '\nURL ที่ใช้: '+(CFG._url||'(ว่าง)')+'\nKey: '+(CFG._key?CFG._key.slice(0,14)+'...':'(ว่าง)')}
+  function withTimeout(promise,ms,msg){
+    return Promise.race([promise,new Promise(function(_,rej){setTimeout(function(){rej(new Error(msg))},ms)})]);
+  }
   async function boot(){
-    if(!CFG.SUPABASE_URL||!CFG.SUPABASE_ANON_KEY||/YOUR_SUPABASE/.test(CFG.SUPABASE_URL+CFG.SUPABASE_ANON_KEY)){gateConfig();return}
-    if(!window.supabase||!window.supabase.createClient){gateMsg('โหลดระบบฐานข้อมูลไม่สำเร็จ','ตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้านี้');return}
-    sb=window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY);
-    sb.auth.onAuthStateChange(function(ev){if(ev==='SIGNED_OUT'&&me){me=null;pins=[];render(false);showLogin()}});
     try{
-      var r=await sb.auth.getSession();
+      if(typeof L==='undefined'){gateMsg('โหลดแผนที่ไม่สำเร็จ','ไม่สามารถโหลดไลบรารีแผนที่ ตรวจสอบอินเทอร์เน็ตแล้วรีเฟรช');return}
+      CFG._url=normUrl(CFG.SUPABASE_URL);CFG._key=cleanStr(CFG.SUPABASE_ANON_KEY);
+      if(/YOUR_SUPABASE/i.test(String(CFG.SUPABASE_URL)+String(CFG.SUPABASE_ANON_KEY))||(!CFG.SUPABASE_URL&&!CFG.SUPABASE_ANON_KEY)){gateConfig();return}
+      if(/^(sb_|eyJ)/i.test(cleanStr(CFG.SUPABASE_URL))){gateMsg('ใส่ key ผิดช่อง','ในไฟล์ config.js ช่อง SUPABASE_URL ถูกใส่ค่าเป็น key ให้เปลี่ยนเป็น Project URL ที่หน้าตาแบบ https://xxxxxxxx.supabase.co (ดูได้ที่ Supabase → Project Settings → API) ส่วนช่อง SUPABASE_ANON_KEY ใช้ key ได้ตามเดิม');return}
+      if(!CFG._url){gateMsg('SUPABASE_URL ไม่ถูกต้อง','ใน config.js ให้ใส่ Project URL เช่น https://abcdefghijklmno.supabase.co'+diagLine());return}
+      var kp=keyProblem(CFG._key);
+      if(kp){gateMsg('SUPABASE_ANON_KEY ไม่ถูกต้อง',kp+diagLine());return}
+      if(!window.supabase||!window.supabase.createClient){gateMsg('โหลดระบบฐานข้อมูลไม่สำเร็จ','ตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้านี้');return}
+      sb=window.supabase.createClient(CFG._url,CFG._key);
+      sb.auth.onAuthStateChange(function(ev){if(ev==='SIGNED_OUT'&&me){me=null;pins=[];render(false);showLogin()}});
+      var r=await withTimeout(sb.auth.getSession(),10000,'เชื่อมต่อ Supabase ช้าผิดปกติ ตรวจสอบ URL/Key และว่าโปรเจกต์ไม่ได้ถูกพัก (Paused)');
       if(r.data&&r.data.session){me=r.data.session.user;await enter()}else showLogin();
-    }catch(e){gateError(errMsg(e))}
+    }catch(e){
+      gateError(errMsg(e)+diagLine());
+    }
   }
   // กลับมาเปิดแอปอีกครั้ง -> โหลดข้อมูลล่าสุด (ใช้ได้หลายเครื่อง)
   document.addEventListener('visibilitychange',function(){
