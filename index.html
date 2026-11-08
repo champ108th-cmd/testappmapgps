@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f766e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="จุดส่งพัสดุ">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>จุดส่งพัสดุ</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root{--brand:#0f766e;--brand-d:#115e59;--bg:#fff;--fg:#1f2937;--muted:#6b7280;--line:#e5e7eb;--danger:#dc2626}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;font-family:system-ui,-apple-system,"Sarabun","Noto Sans Thai",sans-serif;color:var(--fg);background:var(--bg)}
+  #map{position:absolute;inset:0;z-index:0}
+  .topbar{position:absolute;z-index:500;top:calc(env(safe-area-inset-top) + 10px);left:10px;right:10px;display:flex;gap:8px}
+  .topbar input{flex:1;min-width:0;padding:12px 14px;border-radius:12px;border:0;font-size:16px;box-shadow:0 2px 10px rgba(0,0,0,.25);background:#fff}
+  .btn{border:0;border-radius:12px;padding:12px 14px;font-size:15px;font-weight:600;cursor:pointer;background:var(--brand);color:#fff}
+  .btn:active{background:var(--brand-d)}
+  .btn.light{background:#fff;color:var(--fg);box-shadow:0 2px 10px rgba(0,0,0,.25)}
+  .btn.ghost{background:#f3f4f6;color:var(--fg)}
+  .btn.danger{background:#fee2e2;color:var(--danger)}
+  .fabs{position:absolute;z-index:500;right:12px;bottom:calc(env(safe-area-inset-bottom) + 16px);display:flex;flex-direction:column;gap:10px;align-items:flex-end}
+  .fab{width:52px;height:52px;border-radius:50%;border:0;font-size:22px;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.3);cursor:pointer}
+  .fab.main{width:auto;height:56px;border-radius:28px;padding:0 20px;background:var(--brand);color:#fff;font-size:16px;font-weight:700}
+  .sheet-bg{position:fixed;inset:0;z-index:900;background:rgba(0,0,0,.45);display:none}
+  .sheet-bg.open{display:block}
+  .sheet{position:absolute;left:0;right:0;bottom:0;max-height:88%;overflow:auto;background:#fff;border-radius:18px 18px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom) + 16px)}
+  .sheet h2{margin:0 0 12px;font-size:18px}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  .sheet input[type=text],.sheet input[type=tel],.sheet textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:16px;font-family:inherit}
+  .row{display:flex;gap:8px;margin-top:14px}
+  .row>*{flex:1}
+  .coord{font-size:13px;color:var(--muted);margin-top:6px}
+  .item{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+  .item .t{font-weight:700;font-size:16px}
+  .item .s{font-size:14px;color:var(--muted);margin-top:2px;white-space:pre-wrap}
+  .item .acts{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  .item .acts .btn,.pop .btn{padding:9px 12px;font-size:14px;text-decoration:none;display:inline-block}
+  .empty{text-align:center;color:var(--muted);padding:30px 0}
+  .pop{min-width:190px}
+  .pop .t{font-weight:700;font-size:15px}
+  .pop .s{font-size:13px;color:var(--muted);margin:2px 0;white-space:pre-wrap}
+  .pop .acts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  #toast{position:fixed;z-index:1000;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);transform:translateX(-50%);background:#111827;color:#fff;padding:10px 16px;border-radius:20px;font-size:14px;display:none;max-width:90%}
+  .me{width:16px;height:16px;border-radius:50%;background:#2563eb;border:3px solid #fff;box-shadow:0 0 0 2px rgba(37,99,235,.4)}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="topbar">
+  <input id="q" type="search" placeholder="ค้นหา เลขพัสดุ / ชื่อลูกค้า / หมายเหตุ">
+  <button class="btn light" id="btnList">รายการ</button>
+</div>
+
+<div class="fabs">
+  <button class="fab" id="btnLocate" title="ตำแหน่งของฉัน" aria-label="ตำแหน่งของฉัน">📍</button>
+  <button class="fab main" id="btnAdd">＋ ปักหมุดตรงนี้</button>
+</div>
+
+<div class="sheet-bg" id="formBg"><div class="sheet" id="formSheet">
+  <h2 id="formTitle">บันทึกจุดส่งพัสดุ</h2>
+  <input type="hidden" id="fId">
+  <label>เลขพัสดุ</label><input type="text" id="fTrack" autocomplete="off" autocapitalize="characters">
+  <label>ชื่อลูกค้า</label><input type="text" id="fName" autocomplete="off">
+  <label>เบอร์โทร</label><input type="tel" id="fPhone" autocomplete="off">
+  <label>หมายเหตุ (เช่น ฝากไว้กับ รปภ., บ้านสีเขียวท้ายซอย)</label><textarea id="fNote" rows="3"></textarea>
+  <div class="coord" id="fCoord"></div>
+  <div class="row"><button class="btn ghost" id="fGps">ใช้ GPS ตอนนี้แทน</button></div>
+  <div class="row">
+    <button class="btn ghost" id="fCancel">ยกเลิก</button>
+    <button class="btn" id="fSave">บันทึก</button>
+  </div>
+  <div class="row" id="fDelRow" style="display:none"><button class="btn danger" id="fDel">ลบจุดนี้</button></div>
+</div></div>
+
+<div class="sheet-bg" id="listBg"><div class="sheet">
+  <h2>จุดส่งที่บันทึกไว้ (<span id="count">0</span>)</h2>
+  <div id="list"></div>
+  <div class="row">
+    <button class="btn ghost" id="btnExport">สำรองข้อมูล</button>
+    <button class="btn ghost" id="btnImport">นำเข้าข้อมูล</button>
+    <button class="btn" id="btnCloseList">ปิด</button>
+  </div>
+  <input type="file" id="fileImport" accept="application/json" style="display:none">
+</div></div>
+
+<div id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+  var KEY='parcel_pins_v1';
+  var pins=load();
+  function load(){try{var d=JSON.parse(localStorage.getItem(KEY));return Array.isArray(d)?d:[]}catch(e){return[]}}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(pins));return true}catch(e){toast('บันทึกไม่สำเร็จ พื้นที่เก็บข้อมูลเต็มหรือถูกบล็อก');return false}}
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+  function $(id){return document.getElementById(id)}
+  function toast(m){var t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(toast._t);toast._t=setTimeout(function(){t.style.display='none'},2600)}
+  function gmaps(p){return 'https://www.google.com/maps/dir/?api=1&destination='+p.lat+','+p.lng+'&travelmode=driving'}
+  function amaps(p){return 'https://maps.apple.com/?daddr='+p.lat+','+p.lng+'&dirflg=d'}
+  function title(p){return p.track||p.name||'(ไม่มีชื่อ)'}
+
+  /* ---------- map ---------- */
+  var map=L.map('map',{zoomControl:false}).setView([13.7563,100.5018],12);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  var layer=L.layerGroup().addTo(map);
+  var markers={};
+  var meMarker=null, tempMarker=null, meLatLng=null;
+
+  function popupHtml(p){
+    return '<div class="pop"><div class="t">'+esc(title(p))+'</div>'
+      +(p.track&&p.name?'<div class="s">'+esc(p.name)+'</div>':'')
+      +(p.phone?'<div class="s">โทร '+esc(p.phone)+'</div>':'')
+      +(p.note?'<div class="s">'+esc(p.note)+'</div>':'')
+      +'<div class="acts"><a class="btn" target="_blank" rel="noopener" href="'+gmaps(p)+'">นำทาง</a>'
+      +'<a class="btn ghost" target="_blank" rel="noopener" href="'+amaps(p)+'">Apple Maps</a>'
+      +'<button class="btn ghost" data-edit="'+p.id+'">แก้ไข</button></div></div>';
+  }
+  function render(fit){
+    layer.clearLayers();markers={};
+    pins.forEach(function(p){
+      var m=L.marker([p.lat,p.lng]).bindPopup(popupHtml(p));
+      m.addTo(layer);markers[p.id]=m;
+    });
+    if(fit&&pins.length){map.fitBounds(L.latLngBounds(pins.map(function(p){return[p.lat,p.lng]})),{padding:[50,50],maxZoom:16})}
+    renderList();
+  }
+
+  /* ---------- location ---------- */
+  function getPos(ok){
+    if(!navigator.geolocation){toast('เครื่องนี้ไม่รองรับ GPS');return}
+    toast('กำลังหาตำแหน่ง...');
+    navigator.geolocation.getCurrentPosition(function(pos){
+      meLatLng=[pos.coords.latitude,pos.coords.longitude];
+      showMe();ok(meLatLng,pos.coords.accuracy);
+    },function(err){
+      toast(err.code===1?'ไม่ได้รับอนุญาตใช้ตำแหน่ง ตรวจสอบการตั้งค่าเบราว์เซอร์':'หาตำแหน่งไม่ได้ ลองออกที่โล่งแล้วลองใหม่');
+    },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+  }
+  function showMe(){
+    if(!meLatLng)return;
+    if(meMarker)meMarker.setLatLng(meLatLng);
+    else meMarker=L.marker(meLatLng,{icon:L.divIcon({className:'',html:'<div class="me"></div>',iconSize:[16,16]}),interactive:false,zIndexOffset:-100}).addTo(map);
+  }
+  $('btnLocate').onclick=function(){getPos(function(ll){map.setView(ll,Math.max(map.getZoom(),16));toast('พบตำแหน่งแล้ว')})};
+
+  /* ---------- form ---------- */
+  var formPos=null;
+  function setCoord(){$('fCoord').textContent=formPos?('พิกัด '+formPos.lat.toFixed(6)+', '+formPos.lng.toFixed(6)):''}
+  function openForm(p){
+    p=p||{};
+    $('fId').value=p.id||'';
+    $('fTrack').value=p.track||'';$('fName').value=p.name||'';
+    $('fPhone').value=p.phone||'';$('fNote').value=p.note||'';
+    formPos={lat:p.lat,lng:p.lng};setCoord();
+    $('formTitle').textContent=p.id?'แก้ไขจุดส่ง':'บันทึกจุดส่งพัสดุ';
+    $('fDelRow').style.display=p.id?'flex':'none';
+    $('formBg').classList.add('open');
+    map.closePopup();
+  }
+  function closeForm(){$('formBg').classList.remove('open');if(tempMarker){map.removeLayer(tempMarker);tempMarker=null}}
+  $('fCancel').onclick=closeForm;
+  $('formBg').addEventListener('click',function(e){if(e.target===this)closeForm()});
+  $('fGps').onclick=function(){getPos(function(ll){formPos={lat:ll[0],lng:ll[1]};setCoord();toast('อัปเดตพิกัดจาก GPS แล้ว')})};
+  $('fSave').onclick=function(){
+    if(!formPos||typeof formPos.lat!=='number'){toast('ยังไม่มีพิกัด');return}
+    var id=$('fId').value;
+    var data={track:$('fTrack').value.trim(),name:$('fName').value.trim(),phone:$('fPhone').value.trim(),note:$('fNote').value.trim(),lat:formPos.lat,lng:formPos.lng};
+    if(!data.track&&!data.name){toast('กรอกเลขพัสดุหรือชื่อลูกค้าอย่างน้อย 1 อย่าง');return}
+    if(id){
+      var p=pins.filter(function(x){return x.id===id})[0];
+      if(p){for(var k in data)p[k]=data[k]}
+    }else{
+      data.id='p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+      data.createdAt=Date.now();
+      pins.unshift(data);id=data.id;
+    }
+    if(!save())return;
+    closeForm();render(false);
+    map.setView([data.lat,data.lng],Math.max(map.getZoom(),16));
+    if(markers[id])markers[id].openPopup();
+    toast('บันทึกแล้ว');
+  };
+  $('fDel').onclick=function(){
+    var id=$('fId').value;
+    if(!id||!confirm('ลบจุดนี้?'))return;
+    pins=pins.filter(function(x){return x.id!==id});
+    save();closeForm();render(false);toast('ลบแล้ว');
+  };
+  $('btnAdd').onclick=function(){getPos(function(ll){openForm({lat:ll[0],lng:ll[1]})})};
+
+  /* tap on map to choose a spot */
+  map.on('click',function(e){
+    if(tempMarker)map.removeLayer(tempMarker);
+    tempMarker=L.marker(e.latlng,{opacity:.8}).addTo(map);
+    var html='<div class="pop"><div class="t">จุดที่เลือก</div><div class="acts"><button class="btn" id="saveTemp">บันทึกจุดนี้</button></div></div>';
+    tempMarker.bindPopup(html).openPopup();
+    setTimeout(function(){var b=$('saveTemp');if(b)b.onclick=function(){openForm({lat:e.latlng.lat,lng:e.latlng.lng})}},50);
+  });
+
+  /* ---------- popup edit button ---------- */
+  document.addEventListener('click',function(e){
+    var b=e.target.closest&&e.target.closest('[data-edit]');
+    if(b){var p=pins.filter(function(x){return x.id===b.getAttribute('data-edit')})[0];if(p)openForm(p)}
+    var g=e.target.closest&&e.target.closest('[data-go]');
+    if(g){
+      var q=pins.filter(function(x){return x.id===g.getAttribute('data-go')})[0];
+      if(q){closeList();map.setView([q.lat,q.lng],17);if(markers[q.id])markers[q.id].openPopup()}
+    }
+  });
+
+  /* ---------- list ---------- */
+  function renderList(){
+    var term=$('q').value.trim().toLowerCase();
+    var rows=pins.filter(function(p){
+      if(!term)return true;
+      return [p.track,p.name,p.phone,p.note].join(' ').toLowerCase().indexOf(term)>-1;
+    });
+    $('count').textContent=rows.length;
+    $('list').innerHTML=rows.length?rows.map(function(p){
+      var d=p.createdAt?new Date(p.createdAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'}):'';
+      return '<div class="item"><div class="t">'+esc(title(p))+'</div>'
+        +(p.track&&p.name?'<div class="s">'+esc(p.name)+'</div>':'')
+        +(p.phone?'<div class="s">โทร '+esc(p.phone)+'</div>':'')
+        +(p.note?'<div class="s">'+esc(p.note)+'</div>':'')
+        +(d?'<div class="s">บันทึกเมื่อ '+esc(d)+'</div>':'')
+        +'<div class="acts"><a class="btn" target="_blank" rel="noopener" href="'+gmaps(p)+'">นำทาง</a>'
+        +'<button class="btn ghost" data-go="'+p.id+'">ดูบนแผนที่</button>'
+        +'<button class="btn ghost" data-edit="'+p.id+'">แก้ไข</button>'
+        +(p.phone?'<a class="btn ghost" href="tel:'+esc(p.phone)+'">โทร</a>':'')
+        +'</div></div>';
+    }).join(''):'<div class="empty">'+(pins.length?'ไม่พบรายการที่ค้นหา':'ยังไม่มีจุดส่งที่บันทึก<br>กดปุ่ม “ปักหมุดตรงนี้” หรือแตะบนแผนที่')+'</div>';
+  }
+  function openList(){renderList();$('listBg').classList.add('open')}
+  function closeList(){$('listBg').classList.remove('open')}
+  $('btnList').onclick=openList;
+  $('btnCloseList').onclick=closeList;
+  $('listBg').addEventListener('click',function(e){if(e.target===this)closeList()});
+  $('q').addEventListener('input',function(){renderList()});
+  $('q').addEventListener('keydown',function(e){if(e.key==='Enter'){e.target.blur();openList()}});
+  // edit from list: close list first
+  $('list').addEventListener('click',function(e){if(e.target.closest&&e.target.closest('[data-edit]'))closeList()});
+
+  /* ---------- backup ---------- */
+  $('btnExport').onclick=function(){
+    var blob=new Blob([JSON.stringify(pins,null,2)],{type:'application/json'});
+    var a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download='parcel-pins-'+new Date().toISOString().slice(0,10)+'.json';
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(function(){URL.revokeObjectURL(a.href)},2000);
+  };
+  $('btnImport').onclick=function(){$('fileImport').click()};
+  $('fileImport').onchange=function(){
+    var f=this.files[0];if(!f)return;
+    var r=new FileReader();
+    r.onload=function(){
+      try{
+        var arr=JSON.parse(r.result);if(!Array.isArray(arr))throw 0;
+        var have={};pins.forEach(function(p){have[p.id]=1});
+        var n=0;
+        arr.forEach(function(p){
+          if(p&&p.id&&typeof p.lat==='number'&&typeof p.lng==='number'&&!have[p.id]){pins.push(p);n++}
+        });
+        save();render(true);toast('นำเข้า '+n+' รายการ');
+      }catch(e){toast('ไฟล์ไม่ถูกต้อง')}
+    };
+    r.readAsText(f);this.value='';
+  };
+
+  render(true);
+  if(!pins.length&&navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(function(pos){meLatLng=[pos.coords.latitude,pos.coords.longitude];showMe();map.setView(meLatLng,15)},function(){}, {timeout:8000});
+  }
+  if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}
+})();
+</script>
+</body>
+</html>
