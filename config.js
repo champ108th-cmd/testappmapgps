@@ -4,6 +4,6 @@
 // ห้ามใช้ service_role key เด็ดขาด เพราะไฟล์นี้เปิดเผยต่อสาธารณะ
 // anon key ออกแบบมาให้เปิดเผยได้ ข้อมูลถูกป้องกันด้วยการล็อกอิน + RLS ที่ตั้งไว้ใน supabase-setup.sql
 window.APP_CONFIG = {
-  SUPABASE_URL: 'https://sttrxulxtltjpctmroua.supabase.co/rest/v1/',
+  SUPABASE_URL: 'https://sttrxulxtltjpctmroua.supabase.co',
   SUPABASE_ANON_KEY: 'sb_publishable_id0i20vtznhw6RE-qWBvOQ_344Vjqxx'
 };
